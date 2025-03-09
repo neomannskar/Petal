@@ -1,0 +1,7 @@
+# Build script
+
+COMP: "./bin/petal"
+
+ARGS:
+  "--show-internal-process",
+  "./test/test.lts",
