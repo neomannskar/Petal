@@ -1,0 +1,5 @@
+struct Thing;
+
+fn main() -> i32 {
+  ret 0;
+}
