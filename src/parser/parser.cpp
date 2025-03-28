@@ -150,6 +150,9 @@ ASTNode Parser::parse_statement() {
         statement.value = curr.lexeme;
       } else 
       break;
+    case TokenType::ID:
+      // ID
+      break;
     default:
       break;
   }
@@ -376,7 +379,6 @@ ASTNode Parser::parse_struct() {
     case TokenType::ID:
       struc.value = curr.lexeme;
       curr = consume();
-      std::cerr << "HERE" << std::endl;
       if (curr.type == TokenType::SEMICOLON) {
         struc.type = ASTNodeType::STRUCT_DECL;
       } else if (curr.type == TokenType::LCURL) {

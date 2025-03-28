@@ -209,14 +209,10 @@ void Generator::fn_gen(const ASTNode &fn) {
   return_stack_ptr();
 }
 
-/*
-
 void Generator::struct_gen(const ASTNode &struc) {
   if (struc.children.empty()) {
-    struc_declarations.push_back();
+    // struc_declarations.push_back();
   } else {
-    struct_templates.push_back();
+    // struct_templates.push_back();
   }
 }
-
-*/
