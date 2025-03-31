@@ -320,10 +320,9 @@ ASTNode Parser::parse_pub_struct_member() {
 
   curr = consume();
   switch (curr.type) {
-    case TokenType::COLON:
+    case TokenType::ID:
       curr = consume();
       switch (curr.type) {
-        case TokenType::ID:
           // Check ids
         case TokenType::I32:
           pub_mem.children.push_back(ASTNode{ASTNodeType::TYPE, curr.lexeme, {}});
