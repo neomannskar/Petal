@@ -1,4 +1,4 @@
-# Petal
+# petal
 
 Lotus compiler for embedded programming.
 
