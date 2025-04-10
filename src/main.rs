@@ -1,11 +1,13 @@
-use std::io::{Result, Read};
-use std::path::Path;
 use std::fs::File;
+use std::io::{Read, Result};
+use std::path::Path;
 
+use front::nodes::node::Node;
+
+mod back;
 mod config;
 mod front;
 mod middle;
-mod back;
 
 fn read_file_to_string<P: AsRef<Path>>(path: P) -> Result<String> {
     let mut file = File::open(path)?;
@@ -29,8 +31,11 @@ fn main() {
 
     let lexer = front::lexer::Lexer::new(&src);
     let tokens: Vec<front::token::Token> = lexer.collect();
-    let mut parser = front::parser::Parser::new(&tokens);
-    let ast = parser.parse();
-
-    dbg!(tokens);
+    dbg!(&tokens);
+    let mut parser = front::parser::Parser::new(tokens);
+    if let Ok(ast) = parser.parse() {
+        ast.display(0);
+    } else {
+        println!("Failed to parse Lotus program.");
+    }
 }

@@ -36,9 +36,12 @@ impl PetalConfig {
             )
             .get_matches();
 
-        let src = matches.get_one::<String>("src").expect("Source file is required")
+        let src = matches
+            .get_one::<String>("src")
+            .expect("Source file is required")
             .into();
-        let output_file_name = matches.get_one::<String>("output")
+        let output_file_name = matches
+            .get_one::<String>("output")
             .unwrap_or(&"a.out".to_string())
             .clone();
         let debug_mode = matches.get_flag("debug");

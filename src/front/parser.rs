@@ -1,56 +1,45 @@
 use std::collections::HashMap;
-// front/parser.rs
-use std::iter::Peekable;
-use std::slice::Iter;
 use std::sync::{Arc, Mutex};
 
-use crate::front::token::Token;
 use crate::front::ast::Ast;
+use crate::front::token::Token;
 
-use crate::front::nodes::{expr::Expr, operator::Operator};
-use super::nodes::function::{Function, FunctionBody, FunctionParam};
+use super::nodes::function::{FunctionDefinition, FunctionBody, FunctionParam, FunctionReturnType, Return};
+use super::nodes::id::Identifier;
 use super::nodes::node::Node;
 
-pub struct Parser<'a> {
-    tokens: Peekable<Iter<'a, Token>>,
-
-    ids: HashMap<Arc<Mutex<usize>>, Box<dyn Node>>,
-
-    errors: Vec<String>,
+macro_rules! here {
+    () => {
+        println!("Execution passed through here:\n\tfile: {}\n\tline: {}", file!(), line!())
+    };
 }
 
-impl<'a> Parser<'a> {
-    // Create a new parser from a slice of tokens.
-    pub fn new(tokens: &'a [Token]) -> Self {
+pub struct Parser {
+    tokens: Vec<Token>,
+    position: usize,
+    ids: HashMap<Arc<Mutex<usize>>, Box<dyn Node>>,
+}
+
+impl Parser {
+    pub fn new(tokens: Vec<Token>) -> Self {
         Parser {
-            tokens: tokens.iter().peekable(),
-            errors: Vec::new(),
+            tokens: tokens.to_vec(),
+            position: 0,
+            ids: HashMap::new(),
         }
     }
 
-    // Entry point
     pub fn parse(&mut self) -> Result<Box<Ast>, String> {
-        let mut ast: Box<Ast> = Box::new(Ast::new());
+        let mut ast = Box::new(Ast::new());
 
-        while let Some(&token) = self.tokens.peek() {
+        while let Some(token) = self.consume() {
             match token {
                 Token::Fn => {
-                    self.tokens.next();
-                    match self.parse_fn() {
-                        Ok(Some(func)) => {
-                            ast.push_child(Box::new(func));
-                        }
-                        Ok(None) => {
-                            self.errors.push("Function parsing returned None unexpectedly.".to_string());
-                        }
-                        Err(e) => {
-                            self.errors.push(format!("Error parsing function: {}", e));
-                        }
-                    }
+                    let func = self.parse_fn()?;
+                    ast.push_child(Box::new(func)); // Add the parsed function to the AST
                 }
                 _ => {
-                    self.tokens.next();
-                    // Handle other tokens or log unexpected token
+                    // Skip unexpected tokens or handle other cases if needed
                 }
             }
         }
@@ -58,33 +47,153 @@ impl<'a> Parser<'a> {
         Ok(ast)
     }
 
-    pub fn parse_fn(&mut self) -> Result<Option<Function>, String> {
-        let func_name = match self.tokens.next() {
+    pub fn parse_fn(&mut self) -> Result<FunctionDefinition, String> {
+        // Expect a function name
+        let func_name = match self.consume() {
             Some(Token::Identifier(name)) => name.clone(),
-            _ => return Err("Expected function name after 'fn' keyword.".to_string()),
+            _ => return Err("Expected function name after 'fn'.".to_string()),
         };
-    
-        // Step 2: Parse the function parameters
+
+        // Parse parameters
         let parameters = self.parse_fn_parameters()?;
-    
-        // Step 3: Parse the function body
+
+        // Parse return type
+        let return_type = self.parse_fn_return_type()?;
+
+        // Parse the function body
         let body = self.parse_fn_body()?;
-    
-        // Step 4: Construct the Function object
-        let function = Function {
-            name: func_name,
+
+        Ok(FunctionDefinition {
+            id: Identifier::from(func_name),
             parameters,
-            body,
+            return_type,
+            body: Box::new(body),
+        })
+    }
+
+    fn parse_fn_parameters(&mut self) -> Result<Vec<FunctionParam>, String> {
+        let mut parameters = Vec::new();
+
+        // Expect opening parenthesis
+        if let Some(Token::LPar) = self.consume() {
+            loop {
+                match self.consume() {
+                    Some(Token::RPar) => break,
+                    Some(Token::Identifier(id)) => {
+                        // Parse parameter identifier and type
+                        if let Some(Token::Colon) = self.consume() {
+                            if let Some(Token::Identifier(r#type)) = self.consume() {
+                                parameters.push(FunctionParam {
+                                    id: Identifier::from(id.clone()),
+                                    r#type: r#type.clone(),
+                                });
+                            } else {
+                                return Err("Expected type after ':'.".to_string());
+                            }
+                        } else {
+                            return Err("Expected ':' after parameter name.".to_string());
+                        }
+                    }
+                    Some(_) => return Err("Invalid token in function parameters.".to_string()),
+                    None => return Err("Unexpected end of input in parameter list.".to_string()),
+                }
+            }
+        } else {
+            return Err("Expected '(' after function name.".to_string());
+        }
+
+        Ok(parameters)
+    }
+
+    fn parse_fn_return_type(&mut self) -> Result<FunctionReturnType, String> {
+        let mut return_type = FunctionReturnType {
+            r#type: "void".to_string(),
         };
-    
-        Ok(Some(function))
+
+        match self.consume() {
+            Some(Token::Arrow) => {
+                match self.consume() {
+                    Some(Token::I32) => {
+                        return_type.r#type = "i32".to_string();
+                    }
+                    _ => { todo!("parse_fn_return_type()") }
+                }
+            }
+            Some(Token::Semicolon) => { return Ok(return_type); }
+            Some(Token::LCurl) => { return Ok(return_type); }
+            Some(_) => { todo!("parse_fn_return_type()") }
+            None => { todo!("parse_fn_return_type()") }
+        }
+
+        return Ok(return_type);
     }
 
-    pub fn parse_fn_parameters(&mut self) -> Result<Option<Vec<FunctionParam>>, String> {
-        Ok(None)
+    fn parse_fn_body(&mut self) -> Result<FunctionBody, String> {
+        let mut body = FunctionBody {
+            children: Vec::new(),
+        };
+
+        if let Some(Token::LCurl) = self.current() {
+            loop {
+                match self.consume() {
+                    Some(Token::RCurl) => break,
+                    Some(_) => {
+                        let statement = self.parse_statement()?;
+                        body.children.push(statement);
+                    }
+                    None => return Err("Unexpected end of input in function body.".to_string()),
+                }
+            }
+        }
+
+        Ok(body)
     }
 
-    pub fn parse_fn_body(&mut self) -> Result<Option<FunctionBody>, String> {
-        Ok(None)
+    fn parse_statement(&mut self) -> Result<Box<dyn Node>, String> {
+        match self.consume() {
+            Some(Token::Ret) => {
+                return self.parse_return_statement();
+            }
+            None => {
+                panic!("Expected a statement!");
+            }
+            _ => {
+                dbg!(self.current().unwrap());
+                todo!("parse_statement()")
+            }
+        }
+    }
+
+    fn parse_return_statement(&mut self) -> Result<Box<dyn Node>, String> {
+        match self.consume() {
+            Some(Token::Number(num)) => {
+                here!();
+                match self.consume() {
+                    Some(Token::Semicolon) => {
+                        let ret = Return { value: num.clone() };
+                        return Ok(Box::new(ret));
+                    }
+                    _ => { todo!("parse_return_statement()") }
+                }
+            }
+            Some(Token::Semicolon) => {
+                panic!("No value after 'ret' statement");
+            }
+            _ => {
+                todo!("parse_return_statement()")
+            }
+        }
+    }
+
+    fn current(&self) -> Option<Token> {
+        let token = self.tokens.get(self.position).cloned();
+        token
+    }
+
+    // Helper method to consume the current token and advance the position
+    fn consume(&mut self) -> Option<Token> {
+        let token = self.tokens.get(self.position).cloned();
+        self.position += 1;
+        token
     }
 }

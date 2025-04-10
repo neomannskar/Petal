@@ -80,11 +80,11 @@ impl<'a> Lexer<'a> {
         }
         None
     }
-    
+
     fn number(&mut self) -> Token {
         let mut num_str = String::new();
         let mut has_decimal = false;
-    
+
         while let Some(&ch) = self.input.peek() {
             if ch.is_ascii_digit() {
                 num_str.push(ch);
@@ -99,10 +99,10 @@ impl<'a> Lexer<'a> {
             } else {
                 break;
             }
-        }        
-    
+        }
+
         Token::Number(num_str)
-    }    
+    }
 
     fn identifier_or_keyword(&mut self) -> Token {
         let mut ident = String::new();
