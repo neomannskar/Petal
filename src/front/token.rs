@@ -44,3 +44,9 @@ pub enum Token {
     Semicolon,
     Colon,
 }
+
+#[derive(Clone, Debug)]
+pub struct Position {
+    pub line: usize,
+    pub index: usize,
+}

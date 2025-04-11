@@ -1,6 +1,9 @@
 use std::{collections::HashMap, rc::Rc};
 
-use crate::front::nodes::node::Node;
+use crate::{
+    front::nodes::node::Node,
+    middle::ir::{IRContext, IRInstruction},
+};
 
 pub struct Ast {
     pub children: Vec<Box<dyn Node>>,
@@ -18,6 +21,17 @@ impl Node for Ast {
             child.display(indentation + 4);
         }
     }
+
+    fn ir(&self, ctx: &mut IRContext) -> Vec<IRInstruction> {
+        let mut instructions = Vec::new();
+
+        // Generate IR for parameters
+        for child in &self.children {
+            instructions.extend(child.ir(ctx));
+        }
+
+        instructions
+    }
 }
 
 impl Node for Box<Ast> {
@@ -31,6 +45,17 @@ impl Node for Box<Ast> {
             child.display(indentation + 4);
         }
     }
+
+    fn ir(&self, ctx: &mut IRContext) -> Vec<IRInstruction> {
+        let mut instructions = Vec::new();
+
+        // Generate IR for parameters
+        for child in &self.children {
+            instructions.extend(child.ir(ctx));
+        }
+
+        instructions
+    }
 }
 
 impl Ast {
@@ -39,9 +64,5 @@ impl Ast {
             children: Vec::new(),
             ids: HashMap::new(),
         }
-    }
-
-    pub fn push_child(&mut self, c: Box<dyn Node>) {
-        self.children.push(c);
     }
 }

@@ -3,6 +3,9 @@ use std::io::{Read, Result};
 use std::path::Path;
 
 use front::nodes::node::Node;
+use front::semantic::SemanticAnalyzer;
+use front::token::Position;
+use middle::ir::IRContext;
 
 mod back;
 mod config;
@@ -30,12 +33,33 @@ fn main() {
     println!("\n{}", src);
 
     let lexer = front::lexer::Lexer::new(&src);
-    let tokens: Vec<front::token::Token> = lexer.collect();
-    dbg!(&tokens);
-    let mut parser = front::parser::Parser::new(tokens);
-    if let Ok(ast) = parser.parse() {
-        ast.display(0);
-    } else {
-        println!("Failed to parse Lotus program.");
+    let tokens: Vec<(front::token::Token, Position)> = lexer.collect();
+
+    for (token, _) in &tokens {
+        dbg!(token);
+    }
+
+    let mut parser = front::parser::Parser::new(config.src.clone().to_string_lossy().into_owned(), tokens);
+    match parser.parse() {
+        Ok(ast) => {
+            println!("\n");
+            ast.display(0);
+            let analyzer = SemanticAnalyzer::new(ast);
+
+            let analyzed_ast = analyzer.analyze();
+
+            let mut ctx = IRContext::new();
+            let ir = analyzed_ast.ir(&mut ctx);
+
+            for inst in ir {
+                println!("{:?}", inst);
+            }
+
+            // let ir = generator.generate();
+            // println!("\nIntermediate Representation:\n\n{}", ir);
+        }
+        Err(e) => {
+            eprintln!("Parsing failed: {}", e);
+        }
     }
 }
