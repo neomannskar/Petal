@@ -4,11 +4,13 @@ use std::sync::{Arc, Mutex};
 use crate::front::ast::Ast;
 use crate::front::token::Token;
 
+use super::nodes::expr::Expr;
 use super::nodes::function::{
     FunctionBody, FunctionDefinition, FunctionParameter, FunctionReturnType, Return,
 };
 use super::nodes::id::Identifier;
 use super::nodes::node::Node;
+use super::nodes::r#type::{BasicType, Type};
 use super::token::Position;
 
 macro_rules! here {
@@ -126,7 +128,7 @@ impl Parser {
             match token {
                 Token::Fn => {
                     match self.parse_fn() {
-                        Ok(func, ) => {
+                        Ok(func) => {
                             ast.push_child(Box::new(func));
                         }
                         Err(e) => {
@@ -215,10 +217,13 @@ impl Parser {
                         (Token::RPar, pos) => break, // Closing parenthesis marks end of parameters
                         (Token::Identifier(id), pos) => {
                             if let (Token::Colon, pos) = self.consume()? {
-                                if let (Token::Identifier(type_name), pos) = self.consume()? {
+                                if let (Token::Identifier(type_name), pos) = self.current()? {
                                     parameters.push(FunctionParameter {
-                                        id: Identifier::from(id.clone()),
-                                        r#type: type_name.clone(),
+                                        id: Identifier::from(id),
+                                        r#type: Type {
+                                            name: type_name.clone(),
+                                            basic: None,
+                                        }
                                     });
                                 } else {
                                     return Err(ParserError::MissingToken {
@@ -227,6 +232,14 @@ impl Parser {
                                         position: pos,
                                     });
                                 }
+                            } else if let (Token::I32, _) = self.current()? {
+                                parameters.push(FunctionParameter {
+                                    id: Identifier::from(id),
+                                    r#type: Type {
+                                        name: "i32".to_string(),
+                                        basic: Some(BasicType::I32),
+                                    }
+                                });
                             } else {
                                 return Err(ParserError::SyntaxError {
                                     message: "Expected ':' after parameter name.".to_string(),
@@ -234,6 +247,8 @@ impl Parser {
                                     position: pos,
                                 });
                             }
+                            // Very bad, refactor later
+                            _ = self.consume();
                         }
                         (token, pos) => {
                             return Err(ParserError::UnexpectedToken {
@@ -258,14 +273,20 @@ impl Parser {
     }
 
     fn parse_fn_return_type(&mut self) -> Result<FunctionReturnType, ParserError> {
-        let mut return_type = FunctionReturnType {
-            r#type: "void".to_string(),
-        };
+        let mut return_type = FunctionReturnType(
+            Type {
+                name: "void".to_string(),
+                basic: Some(BasicType::Void),
+            }
+        );
 
         match self.consume() {
             Ok((Token::Arrow, _)) => match self.consume() {
                 Ok((Token::I32, _)) => {
-                    return_type.r#type = "i32".to_string();
+                    return_type.0 = Type {
+                        name: "i32".to_string(),
+                        basic: Some(BasicType::I32),
+                    };
                 }
                 x => {
                     dbg!(x);
@@ -326,8 +347,8 @@ impl Parser {
         match self.consume()? {
             (Token::Ret, pos) => {
                 if let (Token::Number(num), pos) = self.consume()? {
-                    if let (Token::Semicolon, pos) = self.consume()? {
-                        return Ok(Box::new(Return { value: num.clone() }));
+                    if let (Token::Semicolon, _) = self.consume()? {
+                        return Ok(Box::new(Return { value: Expr::Number(num.parse::<i64>().unwrap()) } ));
                     } else {
                         return Err(ParserError::SyntaxError {
                             message: "Expected ';' after return value.".to_string(),
@@ -355,7 +376,7 @@ impl Parser {
         match self.consume()? {
             (Token::Number(num), _) => match self.consume()? {
                 (Token::Semicolon, _) => {
-                    let ret = Return { value: num.clone() };
+                    let ret = Return { value: Expr::Number(num.parse::<i64>().unwrap()) };
                     return Ok(Box::new(ret));
                 }
                 _ => {

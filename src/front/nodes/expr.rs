@@ -1,6 +1,9 @@
 use crate::front::nodes::node::Node;
 use crate::front::nodes::operator::Operator;
+use crate::front::semantic::SemanticContext;
 use crate::middle::ir::{IRContext, IRInstruction};
+
+use super::r#type::{BasicType, Type};
 
 pub struct BinaryExpr {
     pub op: Operator,
@@ -20,6 +23,10 @@ impl Node for BinaryExpr {
         );
         self.left.display(indentation + 4);
         self.right.display(indentation + 4);
+    }
+
+    fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
+        Ok(())
     }
 
     fn ir(&self, ctx: &mut IRContext) -> Vec<IRInstruction> {
@@ -68,6 +75,20 @@ pub enum Expr {
     // etc.
 }
 
+impl Expr {
+    pub fn get_type(&self) -> Type {
+        match self {
+            Expr::Number(_) => {
+                Type {
+                    name: "i32".to_string(),
+                    basic: Some(BasicType::I32),
+                }
+            }
+            _ => { todo!("[_] Expr .get_type()") }
+        }
+    }
+}
+
 impl Node for Expr {
     fn push_child(&mut self, c: Box<dyn Node>) {}
 
@@ -94,6 +115,10 @@ impl Node for Expr {
                 );
             }
         }
+    }
+
+    fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
+        Ok(())
     }
 
     fn ir(&self, ctx: &mut IRContext) -> Vec<IRInstruction> {

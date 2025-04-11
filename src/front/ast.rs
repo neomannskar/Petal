@@ -5,6 +5,8 @@ use crate::{
     middle::ir::{IRContext, IRInstruction},
 };
 
+use super::semantic::SemanticContext;
+
 pub struct Ast {
     pub children: Vec<Box<dyn Node>>,
     pub ids: HashMap<String, Rc<Box<dyn Node>>>,
@@ -20,6 +22,10 @@ impl Node for Ast {
         for child in &self.children {
             child.display(indentation + 4);
         }
+    }
+
+    fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
+        Ok(())
     }
 
     fn ir(&self, ctx: &mut IRContext) -> Vec<IRInstruction> {
@@ -44,6 +50,10 @@ impl Node for Box<Ast> {
         for child in &self.children {
             child.display(indentation + 4);
         }
+    }
+
+    fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
+        Ok(())
     }
 
     fn ir(&self, ctx: &mut IRContext) -> Vec<IRInstruction> {

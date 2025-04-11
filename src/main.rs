@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{Read, Result};
+use std::io::{Read, Result, Write};
 use std::path::Path;
 
 use front::nodes::node::Node;
@@ -21,7 +21,7 @@ fn read_file_to_string<P: AsRef<Path>>(path: P) -> Result<String> {
 
 fn main() {
     let config = config::PetalConfig::from_args();
-    dbg!(&config);
+    // dbg!(&config);
 
     let src = match read_file_to_string(Path::new(&config.src)) {
         Ok(s) => s,
@@ -35,28 +35,71 @@ fn main() {
     let lexer = front::lexer::Lexer::new(&src);
     let tokens: Vec<(front::token::Token, Position)> = lexer.collect();
 
-    for (token, _) in &tokens {
+    /* for (token, _) in &tokens {
         dbg!(token);
-    }
+    } */
 
-    let mut parser = front::parser::Parser::new(config.src.clone().to_string_lossy().into_owned(), tokens);
+    let mut parser =
+        front::parser::Parser::new(config.src.clone().to_string_lossy().into_owned(), tokens);
     match parser.parse() {
         Ok(ast) => {
-            println!("\n");
             ast.display(0);
+            println!("");
             let analyzer = SemanticAnalyzer::new(ast);
 
-            let analyzed_ast = analyzer.analyze();
+            match analyzer.analyze() {
+                Ok(_analyzed_ast) => {
+                    println!("Semantic analysis successful!");
+                    // send to ir-generator
+                }
+                Err(e) => {
+                    eprintln!("Semantic analysis failed: {}", e);
+                }
+            }
 
+            /*
             let mut ctx = IRContext::new();
             let ir = analyzed_ast.ir(&mut ctx);
 
             for inst in ir {
                 println!("{:?}", inst);
             }
+            */
 
             // let ir = generator.generate();
             // println!("\nIntermediate Representation:\n\n{}", ir);
+            let mut s = config.src.clone().to_string_lossy().into_owned();
+            s.push_str(".s");
+            let mut output_file = File::create(s).unwrap();
+
+            /*
+
+            .section .text
+                .globl main
+            main:
+                pushq  %rbp
+                movq   %rsp, %rbp
+                movl   $0, %eax
+                popq   %rbp
+                ret
+
+            */
+
+            let asm = String::from(
+                "    .text
+    .globl  main
+main:
+    pushq   %rbp
+    movq    %rsp, %rbp
+    movl    $0, %eax
+    popq    %rbp
+    ret
+",
+            );
+
+            if let Ok(_) = output_file.write_all(asm.as_bytes()) {
+                println!("Successfully wrote to .s file!");
+            }
         }
         Err(e) => {
             eprintln!("Parsing failed: {}", e);
