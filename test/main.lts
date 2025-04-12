@@ -4,10 +4,8 @@ fn add(a: i32, b: i32) -> i32 {
 
 fn main() -> i32 {
     x : i32 = 0;
-    // x = add(add(1, 2), 3) + 4;
-    // y: i32 = add(10, 11);
-    // a: i32;
-    // a = (1 + 2) * 2;
+    x = add(add(1, 2), 3) + 4;
+    r := 10;
     // z := "Hello World!\n";
     ret add(x, 10);
 }

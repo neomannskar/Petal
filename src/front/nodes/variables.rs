@@ -83,6 +83,8 @@ impl Node for WalrusDeclaration {
         );
     }
     fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
+        /*
+
         if ctx.lookup(&self.id).is_some() {
             return Err(format!("Variable '{}' already declared", self.id));
         }
@@ -92,6 +94,8 @@ impl Node for WalrusDeclaration {
             &self.id,
             Symbol::Variable(Type::Custom("<inferred>".to_string()))
         );
+
+        */
         Ok(())
     }
     fn ir(&self, _ctx: &mut crate::middle::ir::IRContext) -> Vec<crate::middle::ir::IRInstruction> {
