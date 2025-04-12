@@ -11,11 +11,11 @@ use super::nodes::function::{
 
 use super::nodes::node::Node;
 use super::nodes::operator::Operator;
-use super::nodes::r#type::{BasicType, Type};
+use super::nodes::r#type::Type;
 use super::nodes::variables::{
     Assignment, DeclarationAssignment, VariableDeclaration, WalrusDeclaration,
 };
-use super::semantic::SemanticContext;
+use super::semantic::{SemanticContext, Symbol};
 use super::token::Position;
 
 macro_rules! here {
@@ -132,7 +132,7 @@ impl Parser {
                 Token::Fn => {
                     match self.parse_fn(ctx) {
                         Ok(func) => {
-                            ast.push_child(Box::new(func));
+                            ast.children.push(Box::new(func));
                         }
                         Err(e) => {
                             eprintln!("{}", e);
@@ -253,14 +253,26 @@ impl Parser {
             // Parse the parameter type.
             let (type_token, type_pos) = self.consume()?;
             let param_type = match type_token {
-                Token::I32 => Type {
-                    name: "i32".to_string(),
-                    basic: Some(BasicType::I32),
-                },
-                Token::Identifier(type_name) => Type {
-                    name: type_name,
-                    basic: None,
-                },
+                Token::I32 => Type::basic("i32"),
+                Token::I64 => Type::basic("i64"),
+                Token::U32 => Type::basic("u32"),
+                Token::U64 => Type::basic("u64"),
+                // For types that are not built-in primitives,
+                // we assume the token is an identifier (e.g. a struct name or type alias)
+                Token::Identifier(id) => {
+                    /*
+                    match ctx.lookup(id) {
+                        Some(t) => {
+                            unreachable!()
+                        }
+                        None => { unreachable!() }
+                    }
+                    */
+
+                    // Need to lookup the type to see if it exists
+
+                    Type::Custom(id)
+                }
                 _ => {
                     return Err(ParserError::MissingToken {
                         expected: "parameter type".to_string(),
@@ -269,6 +281,8 @@ impl Parser {
                     });
                 }
             };
+
+            ctx.add_symbol(&param_name, Symbol::Variable(param_type.clone()));
 
             // Create the function parameter.
             parameters.push(FunctionParameter {
@@ -314,18 +328,12 @@ impl Parser {
     }
 
     fn parse_fn_return_type(&mut self) -> Result<FunctionReturnType, ParserError> {
-        let mut return_type = FunctionReturnType(Type {
-            name: "void".to_string(),
-            basic: Some(BasicType::Void),
-        });
+        let mut return_type = FunctionReturnType(Type::basic("void"));
 
         match self.consume() {
             Ok((Token::Arrow, _)) => match self.consume() {
                 Ok((Token::I32, _)) => {
-                    return_type.0 = Type {
-                        name: "i32".to_string(),
-                        basic: Some(BasicType::I32),
-                    };
+                    return_type.0 = Type::basic("i32");
                 }
                 x => {
                     dbg!(x);
@@ -518,16 +526,26 @@ impl Parser {
     fn parse_factor(&mut self, ctx: &mut SemanticContext) -> Result<Expr, ParserError> {
         let (token, pos) = self.consume()?;
         match token {
-            Token::Number(num) => Ok(Expr::Number(num.parse::<i64>().unwrap())),
-            Token::Identifier(name) => {
+            Token::NumberLiteral(num) => Ok(Expr::Number(num.parse::<i64>().unwrap())),
+            Token::Identifier(id) => {
                 // If a left paren follows, this is a function call.
                 if let Some((next_token, _)) = self.peek() {
                     if next_token == Token::LPar {
-                        return self.parse_fn_call(ctx, name);
+                        return self.parse_fn_call(ctx, id);
                     }
                 }
                 // Otherwise, it's a variable reference.
-                Ok(Expr::Identifier(name))
+
+                dbg!(&ctx.symbol_table);
+
+                match ctx.lookup(&id) {
+                    Some(t) => {
+                        Ok(Expr::VariableCall{ id, resolved: Some(t.clone()) } )
+                    }
+                    None => {
+                        Ok(Expr::Identifier(id))
+                    }
+                }
             }
             Token::LPar => {
                 let expr = self.parse_expression(ctx)?;
@@ -594,7 +612,7 @@ impl Parser {
         }
 
         // If starting token is a number or left parenthesis, treat it as an expression.
-        if let Some((Token::Number(_) | Token::LPar, _)) = self.peek() {
+        if let Some((Token::NumberLiteral(_) | Token::LPar, _)) = self.peek() {
             let expr = self.parse_expression(ctx)?;
             if let Some((Token::Semicolon, _)) = self.peek() {
                 self.consume()?;
@@ -658,7 +676,7 @@ impl Parser {
     ) -> Result<Box<dyn Node>, ParserError> {
         // Consume the identifier.
         let (id_token, _) = self.consume()?;
-        let id_name = if let Token::Identifier(name) = id_token {
+        let id = if let Token::Identifier(name) = id_token {
             name
         } else {
             return Err(ParserError::UnexpectedToken {
@@ -685,14 +703,10 @@ impl Parser {
         // Parse the type.
         let (type_token, type_pos) = self.consume()?;
         let var_type = match type_token {
-            Token::I32 => Type {
-                name: "i32".to_string(),
-                basic: Some(BasicType::I32),
-            },
-            Token::Identifier(type_name) => Type {
-                name: type_name,
-                basic: None,
-            },
+            Token::I32 => Type::basic("i32"),
+            Token::Char => Type::basic("char"),
+            Token::Str => Type::basic("str"),
+            Token::Identifier(type_name) => Type::basic(type_name.as_str()),
             _ => {
                 return Err(ParserError::MissingToken {
                     expected: "variable type".to_string(),
@@ -702,8 +716,10 @@ impl Parser {
             }
         };
 
-        // At this point, we've parsed "x: i32" (for example).
-        // Now, check if the next token is an assignment operator.
+        ctx.add_symbol(&id, Symbol::Variable(var_type.clone()));
+
+        // At this point, we've parsed "<id> : <type>"
+        // Check if the next token is an assignment operator.
         if let Some((Token::Equal, _)) = self.peek() {
             // Consume the '=' token.
             self.consume()?;
@@ -720,12 +736,12 @@ impl Parser {
             }
             // Build the plain declaration (with no initializer)...
             let decl = VariableDeclaration {
-                id: id_name.clone(),
+                id: id.clone(),
                 var_type: var_type.clone(),
             };
             // ...and an assignment node with lhs being the variable name.
             let assign = Assignment {
-                lhs: id_name,
+                lhs: id,
                 value: initializer_expr,
             };
             // Combine them into a DeclarationAssignment node.
@@ -744,7 +760,7 @@ impl Parser {
                 });
             }
             Ok(Box::new(VariableDeclaration {
-                id: id_name,
+                id: id,
                 var_type,
             }))
         }

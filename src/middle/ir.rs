@@ -49,6 +49,10 @@ pub enum IRInstruction {
         true_label: String,
         false_label: String,
     },
+    LoadVariable {
+        dest: String,
+        variable: String,
+    },
     Label(String),
     Ret(String),
 }

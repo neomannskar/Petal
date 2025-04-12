@@ -1,12 +1,11 @@
 use colored::Colorize;
-use rand::seq::index;
 
 use crate::front::nodes::node::Node;
-use crate::front::semantic::SemanticContext;
+use crate::front::semantic::{SemanticContext, Symbol};
 use crate::middle::ir::{IRContext, IRInstruction};
 
 use super::expr::Expr;
-use super::r#type::Type;
+use super::r#type::{FunctionType, Type};
 
 pub struct FunctionDefinition {
     pub id: String,
@@ -16,8 +15,6 @@ pub struct FunctionDefinition {
 }
 
 impl Node for FunctionDefinition {
-    fn push_child(&mut self, c: Box<dyn Node>) {}
-
     fn display(&self, indentation: usize) {
         println!(
             "{:>width$}└───[ {}: `{}`",
@@ -41,7 +38,14 @@ impl Node for FunctionDefinition {
         }
         // Here, you might want to create a function signature type.
         // For simplicity, we assume self.return_type can be converted into a Type.
-        ctx.add_symbol(&self.id, self.return_type.0.clone());
+        ctx.add_symbol(
+            &self.id,
+            Symbol::Function(FunctionType {
+                // Refactor in future
+                parameters: self.parameters.iter().map(|param| param.r#type.clone()).collect(),
+                return_type: Box::new(self.return_type.0.clone()),
+            }),
+        );
 
         // Enter a new scope for the function body.
         ctx.enter_scope();
@@ -94,15 +98,13 @@ pub struct FunctionParameter {
 }
 
 impl Node for FunctionParameter {
-    fn push_child(&mut self, c: Box<dyn Node>) {}
-
     fn display(&self, indentation: usize) {
         println!(
-            "{:>width$}└───[ {}: `{}` : {}",
+            "{:>width$}└───[ {}: `{}` : {:?}",
             "",
             "FnParam".blue(),
             self.id,
-            self.r#type.name.magenta(),
+            self.r#type, // .magenta()
             width = indentation
         );
 
@@ -114,7 +116,7 @@ impl Node for FunctionParameter {
             return Err(format!("Parameter '{}' is already declared.", self.id));
         }
         // Insert the parameter into the symbol table.
-        ctx.add_symbol(&self.id, self.r#type.clone());
+        ctx.add_symbol(&self.id, Symbol::Variable(self.r#type.clone()));
         Ok(())
     }
 
@@ -128,8 +130,6 @@ pub struct FunctionBody {
 }
 
 impl Node for FunctionBody {
-    fn push_child(&mut self, c: Box<dyn Node>) {}
-
     fn display(&self, indentation: usize) {
         println!("{:>width$}└───[ {}", "", "FnBody".blue(), width = indentation);
         for child in &self.children {
@@ -155,14 +155,12 @@ impl Node for FunctionBody {
 pub struct FunctionReturnType(pub Type);
 
 impl Node for FunctionReturnType {
-    fn push_child(&mut self, c: Box<dyn Node>) {}
-
     fn display(&self, indentation: usize) {
         println!(
-            "{:>width$}└───[ {}: {}",
+            "{:>width$}└───[ {}: {:?}",
             "",
             "FnRetType".blue(),
-            self.0.name.magenta(),
+            self.0, // .magenta()
             width = indentation
         );
 
@@ -183,8 +181,6 @@ pub struct Return {
 }
 
 impl Node for Return {
-    fn push_child(&mut self, c: Box<dyn Node>) {}
-
     fn display(&self, indentation: usize) {
         println!("{:>width$}└───[ {}:", "", "Return".red(), width = indentation);
 

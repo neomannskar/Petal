@@ -2,7 +2,7 @@ use std::{thread::sleep, time::Duration};
 
 use colored::Colorize;
 
-use crate::front::semantic::SemanticContext;
+use crate::front::semantic::{SemanticContext, Symbol};
 
 use super::{expr::Expr, node::Node, r#type::Type};
 
@@ -12,16 +12,13 @@ pub struct VariableDeclaration {
 }
 
 impl Node for VariableDeclaration {
-    fn push_child(&mut self, _c: Box<dyn Node>) {
-        panic!("VariableDeclaration cannot have children!");
-    }
     fn display(&self, indentation: usize) {
         println!(
-            "{:>width$}└───[ {}: `{}` : {}",
+            "{:>width$}└───[ {}: `{}` : {:?}",
             "",
             "VarDecl".red(),
             self.id,
-            self.var_type.name.magenta(),
+            self.var_type, // .magenta(),
             width = indentation
         );
     }
@@ -30,7 +27,7 @@ impl Node for VariableDeclaration {
             return Err(format!("Variable '{}' already declared", self.id));
         }
         // Add to symbol table.
-        ctx.add_symbol(&self.id, self.var_type.clone());
+        ctx.add_symbol(&self.id, Symbol::Variable(self.var_type.clone()));
         Ok(())
     }
     fn ir(&self, _ctx: &mut crate::middle::ir::IRContext) -> Vec<crate::middle::ir::IRInstruction> {
@@ -44,9 +41,6 @@ pub struct Assignment {
 }
 
 impl Node for Assignment {
-    fn push_child(&mut self, _c: Box<dyn Node>) {
-        panic!("Assignment nodes do not have children!");
-    }
     fn display(&self, indentation: usize) {
         println!(
             "{:>width$}└───[ {}: `{}`",
@@ -75,9 +69,6 @@ pub struct WalrusDeclaration {
 }
 
 impl Node for WalrusDeclaration {
-    fn push_child(&mut self, _c: Box<dyn Node>) {
-        panic!("WalrusDeclaration doesn't support children!");
-    }
     fn display(&self, indentation: usize) {
         println!(
             "{:>width$}└───[ {}: `{}` := ...",
@@ -95,10 +86,7 @@ impl Node for WalrusDeclaration {
         // For now you could postpone type inference or store a placeholder.
         ctx.add_symbol(
             &self.id,
-            Type {
-                name: "<inferred>".to_string(),
-                basic: None,
-            },
+            Symbol::Variable(Type::Custom("<inferred>".to_string()))
         );
         Ok(())
     }
@@ -114,9 +102,6 @@ pub struct DeclarationAssignment {
 }
 
 impl Node for DeclarationAssignment {
-    fn push_child(&mut self, _c: Box<dyn Node>) {
-        panic!("DeclarationAssignment cannot have children!");
-    }
     fn display(&self, indentation: usize) {
         println!(
             "{:>width$}└───[ {}",
@@ -138,3 +123,13 @@ impl Node for DeclarationAssignment {
         Vec::new()
     }
 }
+
+/* Use later when refactoring for better node control
+
+pub struct VariableCall {
+    pub id: String,
+    pub var_type: Type,
+    pub value: Expr,
+}
+
+*/

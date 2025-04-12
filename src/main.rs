@@ -4,13 +4,23 @@ use std::path::Path;
 
 use front::nodes::node::Node;
 use front::semantic::{SemanticAnalyzer, SemanticContext};
-use front::token::Position;
+use front::token::{Position, Token};
 use middle::ir::IRContext;
 
 mod back;
 mod config;
 mod front;
 mod middle;
+
+macro_rules! here {
+    () => {
+        println!(
+            "Execution passed through here:\n\tfile: {}\n\tline: {}",
+            file!(),
+            line!()
+        )
+    };
+}
 
 fn read_file_to_string<P: AsRef<Path>>(path: P) -> Result<String> {
     let mut file = File::open(path)?;
@@ -33,7 +43,7 @@ fn main() {
     println!("\n{}", src);
 
     let lexer = front::lexer::Lexer::new(&src);
-    let tokens: Vec<(front::token::Token, Position)> = lexer.collect();
+    let tokens: Vec<(front::token::Token, Position)> = lexer.lex();
 
     /*
     for (token, _) in &tokens {
@@ -53,26 +63,22 @@ fn main() {
             let analyzer = SemanticAnalyzer::new(ast);
 
             match analyzer.analyze(&mut ctx) {
-                Ok(_analyzed_ast) => {
+                Ok(analyzed_ast) => {
                     println!("Semantic analysis successful!");
-                    // send to ir-generator
+                    
+                    let mut ctx = IRContext::new();
+                    let ir = analyzed_ast.ir(&mut ctx);
+
+                    for inst in ir {
+                        println!("{:?}", inst);
+                    }
                 }
                 Err(e) => {
                     eprintln!("Semantic analysis failed: {}", e);
                 }
             }
-
+            
             /*
-            let mut ctx = IRContext::new();
-            let ir = analyzed_ast.ir(&mut ctx);
-
-            for inst in ir {
-                println!("{:?}", inst);
-            }
-            */
-
-            // let ir = generator.generate();
-            // println!("\nIntermediate Representation:\n\n{}", ir);
             let mut s = config.src.clone().to_string_lossy().into_owned();
             s.push_str(".s");
             let mut output_file = File::create(s).unwrap();
@@ -105,6 +111,7 @@ main:
             if let Ok(_) = output_file.write_all(asm.as_bytes()) {
                 println!("Successfully wrote to .s file!");
             }
+            */
         }
         Err(e) => {
             eprintln!("Parsing failed: {}", e);

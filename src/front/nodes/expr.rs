@@ -2,10 +2,10 @@ use colored::Colorize;
 
 use crate::front::nodes::node::Node;
 use crate::front::nodes::operator::Operator;
-use crate::front::semantic::SemanticContext;
+use crate::front::semantic::{SemanticContext, Symbol};
 use crate::middle::ir::{IRContext, IRInstruction};
 
-use super::r#type::{BasicType, Type};
+use super::r#type::Type;
 
 pub struct BinaryExpr {
     pub op: Operator,
@@ -14,8 +14,6 @@ pub struct BinaryExpr {
 }
 
 impl Node for BinaryExpr {
-    fn push_child(&mut self, c: Box<dyn Node>) {}
-
     fn display(&self, indentation: usize) {
         println!(
             "{:>width$}└───[ {:?}",
@@ -88,74 +86,111 @@ pub enum Expr {
     Number(i64),
     Binary(Box<BinaryExpr>),
     Identifier(String),
+    VariableCall {
+        id: String,
+        resolved: Option<Symbol>,
+    },
     FunctionCall {
         function: String,
         arguments: Vec<Expr>,
-    }, // etc.
+    },
+    // etc.
 }
 
 impl Expr {
+    /// A non-fallible version returning the type of the expression.
     pub fn get_type(&self, ctx: &mut SemanticContext) -> Type {
         match self {
-            Expr::Number(_) => Type {
-                name: "i32".to_string(),
-                basic: Some(BasicType::I32),
-            },
-            Expr::Binary(bin) => match bin.analyze(ctx) {
-                Ok(()) => Type::basic("i32"),
-                Err(e) => {
-                    eprintln!("{}", e);
-                    todo!();
-                }
-            },
+            Expr::Number(_) => {
+                // By default, we treat literal numbers as i32.
+                Type::basic("i32")
+            }
+            Expr::Binary(bin) => {
+                // For simplicity, we assume that a binary expression is valid and
+                // its type is that of its left side.
+                bin.left.get_type(ctx)
+            }
             Expr::Identifier(id) => {
-                if let Some(t) = ctx.lookup(id) {
-                    t.clone()
+                if let Some(symbol) = ctx.lookup(id) {
+                    match symbol {
+                        Symbol::Variable(t) => t.clone(),
+                        Symbol::Function(func_type) => Type::Function(func_type.clone()),
+                        Symbol::Struct(strct) => Type::Struct(strct.clone()),
+                        // If you have other categories, you could add them here.
+                    }
                 } else {
-                    todo!("");
+                    panic!("Undefined identifier: {}", id);
                 }
             }
-            Expr::FunctionCall {
-                function,
-                arguments,
-            } => {
-                if let Some(t) = ctx.lookup(function) {
-                    t.clone()
+            Expr::VariableCall { id, resolved: _ } => {
+                if let Some(symbol) = ctx.lookup(id) {
+                    if let Symbol::Variable(var_type) = symbol {
+                        var_type.clone()
+                    } else {
+                        panic!("Identifier `{}` is not a variable", id);
+                    }
                 } else {
-                    todo!("Failed to locate the function");
+                    panic!("Failed to locate the variable `{}`", id);
+                }
+            }
+            Expr::FunctionCall { function, arguments: _ } => {
+                if let Some(symbol) = ctx.lookup(function) {
+                    // Expect the looked-up symbol to be a function.
+                    if let Symbol::Function(func_type) = symbol {
+                        *func_type.return_type.clone()
+                    } else {
+                        panic!("Identifier `{}` is not a function", function);
+                    }
+                } else {
+                    panic!("Failed to locate the function '{}'", function);
                 }
             }
         }
     }
 
+    /// A fallible version that returns an error string on failure.
     pub fn infer_type(&self, ctx: &mut SemanticContext) -> Result<Type, String> {
         match self {
-            Expr::Number(_) => {
-                // Example: consider numbers to be of type "i32" by default.
-                Ok(Type::basic("i32"))
-            }
-            Expr::Binary(bin_expr) => {
-                // Assuming that if the analysis passed, both sides share the same type.
-                bin_expr.left.infer_type(ctx)
-            }
+            Expr::Number(_) => Ok(Type::basic("i32")),
+            Expr::Binary(bin_expr) => bin_expr.left.infer_type(ctx),
             Expr::Identifier(id) => {
-                if let Some(t) = ctx.lookup(&id) {
-                    Ok(t.clone())
+                if let Some(symbol) = ctx.lookup(id) {
+                    match symbol {
+                        Symbol::Variable(t) => Ok(t.clone()),
+                        Symbol::Function(func_type) => Ok(Type::Function(func_type.clone())),
+                        Symbol::Struct(strct) => Ok(Type::Struct(strct.clone())),
+                    }
                 } else {
                     Err(format!("Undefined identifier: {}", id))
                 }
             }
-            // Expr::FunctionCall { function, arguments }
-            _ => {
-                todo!("[_] Expr .get_type()")
+            Expr::VariableCall { id, resolved: _ } => {
+                if let Some(symbol) = ctx.lookup(id) {
+                    if let Symbol::Variable(var_type) = symbol {
+                        Ok(var_type.clone())
+                    } else {
+                        Err(format!("Identifier '{}' is not a function", id))
+                    }
+                } else {
+                    Err(format!("Failed to locate function '{}'", id))
+                }
+            }
+            Expr::FunctionCall { function, arguments: _ } => {
+                if let Some(symbol) = ctx.lookup(function) {
+                    if let Symbol::Function(func_type) = symbol {
+                        Ok(*func_type.return_type.clone())
+                    } else {
+                        Err(format!("Identifier '{}' is not a function", function))
+                    }
+                } else {
+                    Err(format!("Failed to locate function '{}'", function))
+                }
             }
         }
     }
 }
 
 impl Node for Expr {
-    fn push_child(&mut self, c: Box<dyn Node>) {}
-
     fn display(&self, indentation: usize) {
         match self {
             Expr::Number(value) => {
@@ -166,9 +201,24 @@ impl Node for Expr {
                 binary_expr.display(indentation /* + 4 */);
             }
             Expr::Identifier(id) => {
-                println!("{:>width$}└───[ `{}`", "", id, width = indentation);
+                println!(
+                    "{:>width$}└───[ {}: `{}`",
+                    "",
+                    "Id".magenta(),
+                    id,
+                    width = indentation
+                );
             }
-            // Expr::FunctionCall { function, arguments }
+            Expr::VariableCall { id, resolved } => {
+                println!(
+                    "{:>width$}└───[ {}: `{}` : {:?}",
+                    "",
+                    "VarCall".red(),
+                    id,
+                    resolved,
+                    width = indentation
+                );
+            }
             Expr::FunctionCall {
                 function,
                 arguments,
@@ -209,6 +259,20 @@ impl Node for Expr {
                     }
                 }
             }
+            Expr::VariableCall { id, resolved: _ } => {
+                if let Some(symbol) = ctx.lookup(id) {
+                    if let Symbol::Variable(_var_type) = symbol {
+                        // Optionally, you could even update the node with the resolved symbol,
+                        // so later phases have immediate access to things like memory offsets.
+                        // resolved = Some(symbol.clone());
+                        Ok(())
+                    } else {
+                        Err(format!("Identifier '{}' is not a variable", id))
+                    }
+                } else {
+                    Err(format!("Undefined variable: {}", id))
+                }
+            }
             Expr::FunctionCall {
                 function,
                 arguments,
@@ -244,6 +308,17 @@ impl Node for Expr {
                     src: id.clone(),
                 }]
             }
+            Expr::VariableCall { id, resolved } => {
+                // Here you would generate the proper IR load instruction.
+                // If `resolved` is set, you can retrieve extra info (e.g. memory location).
+                let symbol = resolved.as_ref().expect("Symbol should be resolved by now");
+                // For example:
+                vec![IRInstruction::LoadVariable {
+                    dest: ctx.allocate_temp(),
+                    variable: id.clone(),
+                    // possibly more fields based on 'symbol'
+                }]
+            },
             // Expr::FunctionCall { function, arguments }
             _ => {
                 todo!("[_] Expr .get_type()")
@@ -257,8 +332,6 @@ pub struct ExpressionStatement {
 }
 
 impl Node for ExpressionStatement {
-    fn push_child(&mut self, _c: Box<dyn Node>) {}
-
     fn display(&self, indentation: usize) {
         println!("{:>width$}└───[ ExprStat", "", width = indentation);
         // Display the underlying expression; you could customize this as needed.
@@ -272,6 +345,14 @@ impl Node for ExpressionStatement {
                 id,
                 width = indentation + 4
             ),
+            Expr::VariableCall { id, resolved } => {
+                println!(
+                    "{:>width$}└───[ VarCall: `{}`",
+                    "",
+                    id,
+                    width = indentation + 4
+                );
+            }
             Expr::FunctionCall {
                 function,
                 arguments,

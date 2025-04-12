@@ -2,12 +2,29 @@ use std::iter::Peekable;
 use std::str::Chars;
 
 use crate::front::token::Token;
-
 use super::token::Position;
+
+macro_rules! here {
+    () => {
+        println!(
+            "Execution passed through here:\n\tfile: {}\n\tline: {}",
+            file!(),
+            line!()
+        )
+    };
+}
 
 pub struct Lexer<'a> {
     position: Position,
     input: Peekable<Chars<'a>>,
+}
+
+impl<'a> Iterator for Lexer<'a> {
+    type Item = (Token, Position);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next_token_internal()
+    }
 }
 
 impl<'a> Lexer<'a> {
@@ -22,142 +39,189 @@ impl<'a> Lexer<'a> {
         match ch {
             '\n' => {
                 self.position.line += 1;
-                self.position.index = 1; // Reset index at the start of a new line
+                self.position.index = 1; // Reset index on a new line
             }
             _ => {
-                self.position.index += 1; // Increment index for other characters
+                self.position.index += 1;
             }
         }
     }
 
-    fn next_token_internal(&mut self) -> Option<(Token, Position)> {
-        if let Some(&ch) = self.input.peek() {
-            while let Some(&ch) = self.input.peek() {
-                match ch {
-                    ' ' | '\t' | '\r' => {
-                        self.input.next(); // Consume whitespace
-                        self.update_position(ch);
-                        continue;
-                    }
-                    '\n' => {
-                        self.input.next(); // Consume newline
-                        self.update_position(ch);
-                        continue;
-                    }
-                    '0'..='9' => {
-                        return Some((self.number(), self.position.clone())); // Token positions updated inside `number()`
-                    }
-                    'a'..='z' | 'A'..='Z' | '_' => {
-                        return Some((self.identifier_or_keyword(), self.position.clone()));
-                        // Similar here
-                    }
-                    '+' => {
-                        self.input.next(); // Consume '+'
-                        self.update_position(ch);
-                        return Some((Token::Plus, self.position.clone()));
-                    }
-                    '-' => {
-                        self.input.next(); // Consume '-'
-                        self.update_position(ch);
-                        if let Some(&next_ch) = self.input.peek() {
-                            if next_ch == '>' {
-                                self.input.next(); // Consume '>'
-                                self.update_position(next_ch);
-                                return Some((Token::Arrow, self.position.clone()));
-                            }
+    /// Skip a nested multiline comment.
+    /// Returns true if the comment was terminated correctly, false otherwise.
+    fn skip_multiline_comment(&mut self) -> bool {
+        let mut depth = 1;
+        while let Some(ch) = self.input.next() {
+            self.update_position(ch);
+            match ch {
+                '/' => {
+                    if let Some(&next_ch) = self.input.peek() {
+                        if next_ch == '*' {
+                            self.input.next(); // Consume '*'
+                            self.update_position('*');
+                            depth += 1;
                         }
-                        return Some((Token::Minus, self.position.clone()));
-                    }
-                    '*' => {
-                        self.input.next(); // Consume '*'
-                        self.update_position(ch);
-                        return Some((Token::Asterisk, self.position.clone()));
-                    }
-                    '/' => {
-                        self.input.next(); // Consume '/'
-                        self.update_position(ch);
-                        if let Some(&next_ch) = self.input.peek() {
-                            if next_ch == '/' {
-                                self.input.next(); // Consume second '/'
-                                self.update_position(next_ch);
-                                // Skip until newline or end of input
-                                while let Some(&comment_ch) = self.input.peek() {
-                                    if comment_ch == '\n' {
-                                        break;
-                                    }
-                                    self.input.next(); // Consume comment character
-                                    self.update_position(comment_ch);
-                                }
-                                continue; // Go back to loop and fetch next token
-                            }
-                        }
-                        return Some((Token::Fslash, self.position.clone()));
-                    }
-                    '%' => {
-                        self.input.next(); // Consume '%'
-                        self.update_position(ch);
-                        return Some((Token::Percent, self.position.clone()));
-                    }
-                    '=' => {
-                        self.input.next(); // Consume '='
-                        self.update_position(ch);
-                        return Some((Token::Equal, self.position.clone()));
-                    }
-                    '(' => {
-                        self.input.next(); // Consume '('
-                        self.update_position(ch);
-                        return Some((Token::LPar, self.position.clone()));
-                    }
-                    ')' => {
-                        self.input.next(); // Consume ')'
-                        self.update_position(ch);
-                        return Some((Token::RPar, self.position.clone()));
-                    }
-                    '{' => {
-                        self.input.next(); // Consume '{'
-                        self.update_position(ch);
-                        return Some((Token::LCurl, self.position.clone()));
-                    }
-                    '}' => {
-                        self.input.next(); // Consume '}'
-                        self.update_position(ch);
-                        return Some((Token::RCurl, self.position.clone()));
-                    }
-                    ',' => {
-                        self.input.next(); // Consume ','
-                        self.update_position(ch);
-                        return Some((Token::Comma, self.position.clone()));
-                    }
-                    ';' => {
-                        self.input.next(); // Consume ';'
-                        self.update_position(ch);
-                        return Some((Token::Semicolon, self.position.clone()));
-                    }
-                    ':' => {
-                        self.input.next(); // Consume ':'
-                        self.update_position(ch);
-                        if let Some(&next_ch) = self.input.peek() {
-                            if next_ch == '=' {
-                                self.input.next(); // Consume '='
-                                self.update_position(next_ch);
-                                return Some((Token::Walrus, self.position.clone()));
-                            }
-                        }
-                        return Some((Token::Colon, self.position.clone()));
-                    }
-                    _ => {
-                        self.input.next(); // Consume unknown character
-                        self.update_position(ch);
-                        println!("Warning: Unknown token '{}'", ch);
-                        return Some((Token::Unknown(ch), self.position.clone()));
                     }
                 }
+                '*' => {
+                    if let Some(&next_ch) = self.input.peek() {
+                        if next_ch == '/' {
+                            self.input.next(); // Consume '/'
+                            self.update_position('/');
+                            depth -= 1;
+                            if depth == 0 {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                _ => {} // Continue consuming comment characters.
             }
-
-            Some((Token::Eof, self.position.clone()))
-        } else {
-            None
         }
+        // If we exit the loop, EOF was reached before closing all nested comments.
+        false
+    }
+
+    fn next_token_internal(&mut self) -> Option<(Token, Position)> {
+        while let Some(&ch) = self.input.peek() {
+            // Skip whitespace
+            match ch {
+                ' ' | '\t' | '\r' => {
+                    self.input.next();
+                    self.update_position(ch);
+                    continue;
+                }
+                '\n' => {
+                    self.input.next();
+                    self.update_position(ch);
+                    continue;
+                }
+                // String literal start
+                '\"' => {
+                    return Some((self.string_literal(), self.position.clone()));
+                }
+                // Character literal start
+                '\'' => {
+                    return Some((self.character_literal(), self.position.clone()));
+                }
+                '0'..='9' => {
+                    return Some((self.number(), self.position.clone()));
+                }
+                'a'..='z' | 'A'..='Z' | '_' => {
+                    return Some((self.identifier_or_keyword(), self.position.clone()));
+                }
+                '+' => {
+                    self.input.next();
+                    self.update_position(ch);
+                    return Some((Token::Plus, self.position.clone()));
+                }
+                '-' => {
+                    self.input.next(); // Consume '-'
+                    self.update_position(ch);
+                    if let Some(&next_ch) = self.input.peek() {
+                        if next_ch == '>' {
+                            self.input.next();
+                            self.update_position(next_ch);
+                            return Some((Token::Arrow, self.position.clone()));
+                        }
+                    }
+                    return Some((Token::Minus, self.position.clone()));
+                }
+                '*' => {
+                    self.input.next();
+                    self.update_position(ch);
+                    return Some((Token::Asterisk, self.position.clone()));
+                }
+                '/' => {
+                    self.input.next(); // Consume '/'
+                    self.update_position(ch);
+                    if let Some(&next_ch) = self.input.peek() {
+                        if next_ch == '/' {
+                            self.input.next(); // Consume the second '/'
+                            self.update_position(next_ch);
+                            // Skip single-line comment
+                            while let Some(&comment_ch) = self.input.peek() {
+                                if comment_ch == '\n' {
+                                    break;
+                                }
+                                self.input.next();
+                                self.update_position(comment_ch);
+                            }
+                            continue; // Restart the loop after comment.
+                        } else if next_ch == '*' {
+                            self.input.next(); // Consume '*' signaling multiline comment.
+                            self.update_position(next_ch);
+                            // Skip the entire multiline comment.
+                            if !self.skip_multiline_comment() {
+                                println!("Error: Unterminated multiline comment.");
+                                // In a real compiler, you might return an Error token or panic.
+                            }
+                            continue; // Restart scanning tokens after the comment.
+                        }
+                    }
+                    return Some((Token::Fslash, self.position.clone()));
+                }
+                '%' => {
+                    self.input.next();
+                    self.update_position(ch);
+                    return Some((Token::Percent, self.position.clone()));
+                }
+                '=' => {
+                    self.input.next();
+                    self.update_position(ch);
+                    return Some((Token::Equal, self.position.clone()));
+                }
+                '(' => {
+                    self.input.next();
+                    self.update_position(ch);
+                    return Some((Token::LPar, self.position.clone()));
+                }
+                ')' => {
+                    self.input.next();
+                    self.update_position(ch);
+                    return Some((Token::RPar, self.position.clone()));
+                }
+                '{' => {
+                    self.input.next();
+                    self.update_position(ch);
+                    return Some((Token::LCurl, self.position.clone()));
+                }
+                '}' => {
+                    self.input.next();
+                    self.update_position(ch);
+                    return Some((Token::RCurl, self.position.clone()));
+                }
+                ',' => {
+                    self.input.next();
+                    self.update_position(ch);
+                    return Some((Token::Comma, self.position.clone()));
+                }
+                ';' => {
+                    self.input.next();
+                    self.update_position(ch);
+                    return Some((Token::Semicolon, self.position.clone()));
+                }
+                ':' => {
+                    self.input.next();
+                    self.update_position(ch);
+                    if let Some(&next_ch) = self.input.peek() {
+                        if next_ch == '=' {
+                            self.input.next(); // Consume '='
+                            self.update_position(next_ch);
+                            return Some((Token::Walrus, self.position.clone()));
+                        }
+                    }
+                    return Some((Token::Colon, self.position.clone()));
+                }
+                _ => {
+                    self.input.next();
+                    self.update_position(ch);
+                    println!("Warning: Unknown token '{}'", ch);
+                    return Some((Token::Unknown(ch), self.position.clone()));
+                }
+            }
+        }
+        None
     }
 
     fn number(&mut self) -> Token {
@@ -182,7 +246,7 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        Token::Number(num_str)
+        Token::NumberLiteral(num_str)
     }
 
     fn identifier_or_keyword(&mut self) -> Token {
@@ -220,12 +284,86 @@ impl<'a> Lexer<'a> {
             _ => Token::Identifier(ident),
         }
     }
-}
 
-impl<'a> Iterator for Lexer<'a> {
-    type Item = (Token, Position);
+    fn string_literal(&mut self) -> Token {
+        let mut literal = String::new();
+        // Consume the opening double-quote.
+        self.input.next();
+        self.update_position('\"');
+        
+        while let Some(&ch) = self.input.peek() {
+            if ch == '"' {
+                self.input.next(); // Consume the closing quote.
+                self.update_position(ch);
+                break;
+            } else if ch == '\\' {
+                self.input.next();
+                self.update_position('\\');
+                if let Some(&esc_ch) = self.input.peek() {
+                    let escaped_char = match esc_ch {
+                        'n' => '\n',
+                        't' => '\t',
+                        'r' => '\r',
+                        '"' => '"',
+                        '\\' => '\\',
+                        '\'' => '\'',
+                        other => other,
+                    };
+                    literal.push(escaped_char);
+                    self.input.next();
+                    self.update_position(esc_ch);
+                }
+            } else {
+                literal.push(ch);
+                self.input.next();
+                self.update_position(ch);
+            }
+        }
+        Token::StringLiteral(literal)
+    }
 
-    fn next(&mut self) -> Option<Self::Item> {
-        self.next_token_internal()
+    fn character_literal(&mut self) -> Token {
+        // Consume the opening single-quote.
+        self.input.next();
+        self.update_position('\'');
+        let mut char_val = None;
+        if let Some(&ch) = self.input.peek() {
+            if ch == '\\' {
+                self.input.next();
+                self.update_position('\\');
+                if let Some(&esc_ch) = self.input.peek() {
+                    let c = match esc_ch {
+                        'n' => '\n',
+                        't' => '\t',
+                        'r' => '\r',
+                        '\\' => '\\',
+                        '\'' => '\'',
+                        '"' => '"',
+                        other => other,
+                    };
+                    char_val = Some(c);
+                    self.input.next();
+                    self.update_position(esc_ch);
+                }
+            } else {
+                char_val = Some(ch);
+                self.input.next();
+                self.update_position(ch);
+            }
+        }
+        // Expect the closing single-quote.
+        if let Some(&ch) = self.input.peek() {
+            if ch == '\'' {
+                self.input.next();
+                self.update_position('\'');
+            }
+        }
+        Token::CharacterLiteral(char_val.unwrap_or('\0'))
+    }
+
+    pub fn lex(self) -> Vec<(Token, Position)> {
+        let mut vec: Vec<(Token, Position)> = self.collect();
+        vec.push((Token::Eof, Position { line: vec.last().unwrap().1.line + 1, index: 1 }));
+        vec
     }
 }

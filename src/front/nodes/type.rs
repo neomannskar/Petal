@@ -1,69 +1,48 @@
-use super::node::Node;
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ReturnType {
+pub enum PrimitiveType {
     Void,
     I32,
     I64,
     U32,
     U64,
+    // You can add more primitives if needed.
 }
 
+// A function type holds parameter and return type information.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum BasicType {
-    FunctionDefinition(ReturnType),
-
-    Void,
-    I32,
-    I64,
-    U32,
-    U64,
-    // etc.
+pub struct FunctionType {
+    pub parameters: Vec<Type>,
+    pub return_type: Box<Type>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Type {
+// A struct type holds its name and a list of field names with their types.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct StructType {
     pub name: String,
-    pub basic: Option<BasicType>,
+    pub fields: Vec<(String, Type)>, //  Use HashMap if field lookup is necessary later
+}
+
+/// The main type enum. It distinguishes primitive types, function types,
+/// and user-defined types (or unresolved types), and serves as the fundamental type
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Type {
+    Primitive(PrimitiveType),
+    Function(FunctionType),
+    Struct(StructType),
+    /// A generic or custom type that might be resolved later (for example, a type alias)
+    Custom(String),
 }
 
 impl Type {
-    pub fn basic(name: &str) -> Type {
+    /// A helper to quickly generate a basic (primitive) type.
+    pub fn basic(name: &str) -> Self {
         match name {
-            "i32" => Type {
-                name: name.to_string(),
-                basic: Some(BasicType::I32),
-            },
-            _ => {
-                todo!("[_] Type::basic()");
-            }
+            "i32" => Type::Primitive(PrimitiveType::I32),
+            "i64" => Type::Primitive(PrimitiveType::I64),
+            "u32" => Type::Primitive(PrimitiveType::U32),
+            "u64" => Type::Primitive(PrimitiveType::U64),
+            "void" => Type::Primitive(PrimitiveType::Void),
+            _ => Type::Custom(name.to_string()),
         }
-    }
-}
-
-impl Node for Type {
-    fn push_child(&mut self, c: Box<dyn Node>) {
-        panic!("Node: `Type` can't bear children!");
-    }
-
-    fn display(&self, indentation: usize) {
-        if let Some(basic) = &self.basic {
-            println!("{:>width$}└───[ Type: {:?}", "", basic, width = indentation);
-        } else {
-            println!(
-                "{:>width$}└───[ Type: {}",
-                "",
-                self.name,
-                width = indentation
-            );
-        }
-    }
-
-    fn analyze(&self, ctx: &mut crate::front::semantic::SemanticContext) -> Result<(), String> {
-        Ok(())
-    }
-
-    fn ir(&self, ctx: &mut crate::middle::ir::IRContext) -> Vec<crate::middle::ir::IRInstruction> {
-        Vec::new()
     }
 }

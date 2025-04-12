@@ -17,7 +17,9 @@ pub enum Token {
     For,
     While,
 
-    Number(String), // Stores both integers and floats as strings
+    NumberLiteral(String), // Stores both integers and floats as strings
+    CharacterLiteral(char),
+    StringLiteral(String),
 
     Plus,
     Minus,
@@ -43,6 +45,7 @@ pub enum Token {
     F32,
     F64,
     Char,
+    Str,
 
     Comma,
     Semicolon,

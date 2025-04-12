@@ -13,10 +13,6 @@ pub struct Ast {
 }
 
 impl Node for Ast {
-    fn push_child(&mut self, c: Box<dyn Node>) {
-        self.children.push(c);
-    }
-
     fn display(&self, indentation: usize) {
         println!("{:>width$}Abstract Syntax Tree", "", width = indentation);
         for child in &self.children {
@@ -41,10 +37,6 @@ impl Node for Ast {
 }
 
 impl Node for Box<Ast> {
-    fn push_child(&mut self, c: Box<dyn Node>) {
-        self.children.push(c);
-    }
-
     fn display(&self, indentation: usize) {
         println!(
             "{:>width$}Abstract Syntax Tree\n┌───────────────────",
