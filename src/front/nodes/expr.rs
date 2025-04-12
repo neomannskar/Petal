@@ -84,6 +84,8 @@ impl Node for BinaryExpr {
 
 pub enum Expr {
     Number(i64),
+    Character(char),
+    String(String),
     Binary(Box<BinaryExpr>),
     Identifier(String),
     VariableCall {
@@ -104,6 +106,12 @@ impl Expr {
             Expr::Number(_) => {
                 // By default, we treat literal numbers as i32.
                 Type::basic("i32")
+            }
+            Expr::Character(_) => {
+                Type::basic("char")
+            }
+            Expr::String(_) => {
+                Type::basic("str")
             }
             Expr::Binary(bin) => {
                 // For simplicity, we assume that a binary expression is valid and
@@ -152,6 +160,8 @@ impl Expr {
     pub fn infer_type(&self, ctx: &mut SemanticContext) -> Result<Type, String> {
         match self {
             Expr::Number(_) => Ok(Type::basic("i32")),
+            Expr::Character(_) => Ok(Type::basic("char")),
+            Expr::String(_) => Ok(Type::basic("str")),
             Expr::Binary(bin_expr) => bin_expr.left.infer_type(ctx),
             Expr::Identifier(id) => {
                 if let Some(symbol) = ctx.lookup(id) {
@@ -195,6 +205,12 @@ impl Node for Expr {
         match self {
             Expr::Number(value) => {
                 println!("{:>width$}└───[ `{}`", "", value, width = indentation);
+            }
+            Expr::Character(ch) => {
+                println!("{:>width$}└───[ '{}'", "", ch, width = indentation);
+            }
+            Expr::String(str) => {
+                println!("{:>width$}└───[ \"{}\"", "", str.replace("\n", ""), width = indentation);
             }
             Expr::Binary(binary_expr) => {
                 // println!("{:>width$}└───[ Expr: Binary", "", width = indentation);
@@ -242,6 +258,12 @@ impl Node for Expr {
         match self {
             Expr::Number(_) => {
                 // A literal number is always valid.
+                Ok(())
+            }
+            Expr::Character(_) => {
+                Ok(())
+            }
+            Expr::String(_) => {
                 Ok(())
             }
             Expr::Binary(bin_expr) => {
@@ -338,6 +360,8 @@ impl Node for ExpressionStatement {
         // For instance:
         match &self.expression {
             Expr::Number(n) => println!("{:>width$}-> Number({})", "", n, width = indentation + 4),
+            Expr::Character(ch) => println!("{:>width$}-> Character('{}')", "", ch, width = indentation + 4),
+            Expr::String(str) => println!("{:>width$}-> String(\"{}\")", "", str, width = indentation + 4),
             Expr::Binary(bin) => bin.display(indentation + 4),
             Expr::Identifier(id) => println!(
                 "{:>width$}-> Identifier({})",

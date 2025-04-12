@@ -6,6 +6,6 @@ fn main() -> i32 {
     x : i32 = 0;
     x = add(add(1, 2), 3) + 4;
     r := 10;
-    // z := "Hello World!\n";
+    s: str = "Hello World!\n"; 
     ret add(x, 10);
 }

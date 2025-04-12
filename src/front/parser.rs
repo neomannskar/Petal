@@ -527,6 +527,8 @@ impl Parser {
         let (token, pos) = self.consume()?;
         match token {
             Token::NumberLiteral(num) => Ok(Expr::Number(num.parse::<i64>().unwrap())),
+            Token::CharacterLiteral(ch) => Ok(Expr::Character(ch)),
+            Token::StringLiteral(str) => Ok(Expr::String(str)),
             Token::Identifier(id) => {
                 // If a left paren follows, this is a function call.
                 if let Some((next_token, _)) = self.peek() {
