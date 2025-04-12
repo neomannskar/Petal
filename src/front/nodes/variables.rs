@@ -1,9 +1,9 @@
-use crate::front::semantic::{SemanticAnalyzer, SemanticContext};
+use crate::front::semantic::SemanticContext;
 
-use super::{id::Identifier, node::Node, r#type::Type};
+use super::{node::Node, r#type::Type};
 
 pub struct VariableDeclaration {
-    id: Identifier,
+    id: String,
     var_type: Type,
 }
 
@@ -13,22 +13,16 @@ impl Node for VariableDeclaration {
     }
 
     fn display(&self, indentation: usize) {
-        println!(
-            "{:>width$}-> VariableDeclaration:",
-            "",
-            width = indentation
-        );
-
-        self.id.display(indentation + 4);
+        println!("{:>width$}-> VariableDeclaration: `{}`", "", self.id, width = indentation);
     }
 
     fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
         // Check if this variable was already declared in the current scope.
-        if ctx.lookup(self.id.id).is_some() {
-            return Err(format!("Variable '{}' already declared", self.id.name));
+        if ctx.lookup(&self.id).is_some() {
+            return Err(format!("Variable '{}' already declared", self.id));
         }
         // Register it in the symbol table and current scope.
-        ctx.add_symbol(self.id.id, self.var_type.clone());
+        ctx.add_symbol(&self.id, self.var_type.clone());
         Ok(())
     }
 

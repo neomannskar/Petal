@@ -22,7 +22,8 @@ pub enum Token {
     Plus,
     Minus,
     Asterisk,
-    FSlash,
+    Fslash,
+    Percent,
 
     LPar,
     RPar,

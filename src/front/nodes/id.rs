@@ -1,3 +1,4 @@
+/*
 // use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -6,15 +7,20 @@ use crate::front::semantic::SemanticContext;
 
 static IDENTIFIER_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct Identifier {
     pub name: String,
     pub id: usize,
 }
 
 impl Identifier {
-    pub fn new(name: String) -> Self {
+    pub fn new<T: ToString>(name: T, ctx: &mut SemanticContext) -> Self {
+        if let Some(t) = ctx.lookup(&Identifier { name: name.to_string(), id: _ }) {
+            
+        }
+        
         let id = IDENTIFIER_COUNTER.fetch_add(1, Ordering::Relaxed);
-        Identifier { name, id }
+        Identifier { name: name.to_string(), id }
     }
 }
 
@@ -52,7 +58,7 @@ impl Node for Identifier {
 
     fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
         // Ensure the identifier exists in the current or parent scopes
-        if ctx.lookup(self.id).is_none() {
+        if ctx.lookup(self).is_none() {
             return Err(format!("Undefined identifier: {}", self.name));
         }
         Ok(())
@@ -62,15 +68,4 @@ impl Node for Identifier {
         Vec::new()
     }
 }
-
-impl From<String> for Identifier {
-    fn from(name: String) -> Self {
-        Identifier::new(name)
-    }
-}
-
-impl From<&str> for Identifier {
-    fn from(name: &str) -> Self {
-        Identifier::new(name.to_string())
-    }
-}
+*/

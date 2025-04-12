@@ -76,7 +76,12 @@ impl<'a> Lexer<'a> {
                     '/' => {
                         self.input.next(); // Consume '/'
                         self.update_position(ch);
-                        return Some((Token::FSlash, self.position.clone()));
+                        return Some((Token::Fslash, self.position.clone()));
+                    }
+                    '%' => {
+                        self.input.next(); // Consume '%'
+                        self.update_position(ch);
+                        return Some((Token::Percent, self.position.clone()));
                     }
                     '(' => {
                         self.input.next(); // Consume '('

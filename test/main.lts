@@ -1,3 +1,7 @@
+fn add(a: i32, b: i32) -> i32 {
+    ret a + b;
+}
+
 fn main() -> i32 {
-    ret 0;
+    ret add(add(1, 2), 3) + 4;
 }

@@ -9,4 +9,5 @@ pub enum Operator {
     Minus,
     Asterisk,
     Fslash,
+    Percent, // Modulus,
 }

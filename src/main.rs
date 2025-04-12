@@ -3,7 +3,7 @@ use std::io::{Read, Result, Write};
 use std::path::Path;
 
 use front::nodes::node::Node;
-use front::semantic::SemanticAnalyzer;
+use front::semantic::{SemanticAnalyzer, SemanticContext};
 use front::token::Position;
 use middle::ir::IRContext;
 
@@ -39,15 +39,18 @@ fn main() {
         dbg!(token);
     } */
 
+    let mut ctx = SemanticContext::new();
+
     let mut parser =
         front::parser::Parser::new(config.src.clone().to_string_lossy().into_owned(), tokens);
-    match parser.parse() {
+    match parser.parse(&mut ctx) {
         Ok(ast) => {
             ast.display(0);
             println!("");
+
             let analyzer = SemanticAnalyzer::new(ast);
 
-            match analyzer.analyze() {
+            match analyzer.analyze(&mut ctx) {
                 Ok(_analyzed_ast) => {
                     println!("Semantic analysis successful!");
                     // send to ir-generator

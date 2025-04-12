@@ -3,8 +3,8 @@ use std::collections::{HashMap, HashSet};
 use super::{ast::Ast, nodes::r#type::Type};
 
 pub struct SemanticContext {
-    pub symbol_table: HashMap<usize, Type>,
-    pub current_scope: Vec<HashSet<usize>>,
+    pub symbol_table: HashMap<String, Type>,
+    pub current_scope: Vec<HashSet<String>>,
     // Optionally store additional context such as the current function's expected return type.
     pub current_function_return: Option<Type>,
 }
@@ -27,21 +27,21 @@ impl SemanticContext {
     }
 
     /// Add a new symbol keyed by its unique usize id and store its Type.
-    pub fn add_symbol(&mut self, id: usize, symbol_type: Type) {
+    pub fn add_symbol(&mut self, id: &String, symbol_type: Type) {
         // Insert into the symbol table
-        self.symbol_table.insert(id, symbol_type);
+        self.symbol_table.insert(id.clone(), symbol_type);
         // Record the id in the current scope for later lookup.
         if let Some(scope) = self.current_scope.last_mut() {
-            scope.insert(id);
+            scope.insert(id.clone());
         }
     }
 
     /// Look up a type in the symbol table by the id.
-    pub fn lookup(&self, id: usize) -> Option<&Type> {
+    pub fn lookup(&self, id: &String) -> Option<&Type> {
         // Check the scopes (you might simplify this if your symbol_table is global)
         for scope in self.current_scope.iter().rev() {
-            if scope.contains(&id) {
-                return self.symbol_table.get(&id);
+            if scope.contains(id) {
+                return self.symbol_table.get(id);
             }
         }
         None
@@ -56,13 +56,13 @@ impl SemanticAnalyzer {
         SemanticAnalyzer { ast }
     }
 
-    pub fn analyze(self) -> Result<Box<Ast>, String> {
-        let mut ctx = SemanticContext::new();
-
+    pub fn analyze(self, ctx: &mut SemanticContext) -> Result<Box<Ast>, String> {
         // Analyze each child node of the AST
         for node in self.ast.children.iter() {
-            node.analyze(&mut ctx)?;
+            node.analyze(ctx)?;
         }
+
+        // dbg!(&ctx.symbol_table);
 
         Ok(self.ast)
     }
