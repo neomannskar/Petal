@@ -1,10 +1,10 @@
 use std::fs::File;
-use std::io::{Read, Result, Write};
+use std::io::{Read, Result};
 use std::path::Path;
 
 use front::nodes::node::Node;
 use front::semantic::{SemanticAnalyzer, SemanticContext};
-use front::token::{Position, Token};
+use front::token::Position;
 use middle::ir::IRContext;
 
 mod back;

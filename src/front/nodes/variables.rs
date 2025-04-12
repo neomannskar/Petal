@@ -1,5 +1,3 @@
-use std::{thread::sleep, time::Duration};
-
 use colored::Colorize;
 
 use crate::front::semantic::{SemanticContext, Symbol};

@@ -1,6 +1,3 @@
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-
 use crate::front::ast::Ast;
 use crate::front::token::Token;
 

@@ -1,4 +1,3 @@
-use crate::front::{ast::Ast, nodes::function::FunctionDefinition};
 pub struct IRContext {
     temp_count: usize, // Counter for temporary register names
 }
