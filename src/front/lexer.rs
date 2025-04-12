@@ -76,12 +76,32 @@ impl<'a> Lexer<'a> {
                     '/' => {
                         self.input.next(); // Consume '/'
                         self.update_position(ch);
+                        if let Some(&next_ch) = self.input.peek() {
+                            if next_ch == '/' {
+                                self.input.next(); // Consume second '/'
+                                self.update_position(next_ch);
+                                // Skip until newline or end of input
+                                while let Some(&comment_ch) = self.input.peek() {
+                                    if comment_ch == '\n' {
+                                        break;
+                                    }
+                                    self.input.next(); // Consume comment character
+                                    self.update_position(comment_ch);
+                                }
+                                continue; // Go back to loop and fetch next token
+                            }
+                        }
                         return Some((Token::Fslash, self.position.clone()));
                     }
                     '%' => {
                         self.input.next(); // Consume '%'
                         self.update_position(ch);
                         return Some((Token::Percent, self.position.clone()));
+                    }
+                    '=' => {
+                        self.input.next(); // Consume '='
+                        self.update_position(ch);
+                        return Some((Token::Equal, self.position.clone()));
                     }
                     '(' => {
                         self.input.next(); // Consume '('
@@ -116,6 +136,13 @@ impl<'a> Lexer<'a> {
                     ':' => {
                         self.input.next(); // Consume ':'
                         self.update_position(ch);
+                        if let Some(&next_ch) = self.input.peek() {
+                            if next_ch == '=' {
+                                self.input.next(); // Consume '='
+                                self.update_position(next_ch);
+                                return Some((Token::Walrus, self.position.clone()));
+                            }
+                        }
                         return Some((Token::Colon, self.position.clone()));
                     }
                     _ => {

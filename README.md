@@ -151,4 +151,4 @@ Optimization:
 
 Assembly Code Generation:
 
-  Translate IR to target-specific assembly by mapping instructions (e.g., Add -> ADD).
+  Translate IR to target-specific assembly by mapping instructions (e.g., Add └───[ ADD).

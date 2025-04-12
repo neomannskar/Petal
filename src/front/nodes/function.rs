@@ -1,3 +1,4 @@
+use colored::Colorize;
 use rand::seq::index;
 
 use crate::front::nodes::node::Node;
@@ -18,7 +19,13 @@ impl Node for FunctionDefinition {
     fn push_child(&mut self, c: Box<dyn Node>) {}
 
     fn display(&self, indentation: usize) {
-        println!("{:>width$}-> FunctionDefinition: `{}`", "", self.id, width = indentation);
+        println!(
+            "{:>width$}└───[ {}: `{}`",
+            "",
+            "FnDef".yellow(),
+            self.id,
+            width = indentation
+        );
 
         for param in &self.parameters {
             param.display(indentation + 4);
@@ -90,9 +97,16 @@ impl Node for FunctionParameter {
     fn push_child(&mut self, c: Box<dyn Node>) {}
 
     fn display(&self, indentation: usize) {
-        println!("{:>width$}-> FunctionParameter: `{}`", "", self.id, width = indentation);
-        
-        self.r#type.display(indentation + 4);
+        println!(
+            "{:>width$}└───[ {}: `{}` : {}",
+            "",
+            "FnParam".blue(),
+            self.id,
+            self.r#type.name.magenta(),
+            width = indentation
+        );
+
+        // self.r#type.display(indentation + 4);
     }
 
     fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
@@ -117,7 +131,7 @@ impl Node for FunctionBody {
     fn push_child(&mut self, c: Box<dyn Node>) {}
 
     fn display(&self, indentation: usize) {
-        println!("{:>width$}-> FunctionBody", "", width = indentation);
+        println!("{:>width$}└───[ {}", "", "FnBody".blue(), width = indentation);
         for child in &self.children {
             child.display(indentation + 4);
         }
@@ -144,9 +158,15 @@ impl Node for FunctionReturnType {
     fn push_child(&mut self, c: Box<dyn Node>) {}
 
     fn display(&self, indentation: usize) {
-        println!("{:>width$}-> FunctionReturnType:", "", width = indentation);
+        println!(
+            "{:>width$}└───[ {}: {}",
+            "",
+            "FnRetType".blue(),
+            self.0.name.magenta(),
+            width = indentation
+        );
 
-        self.0.display(indentation + 4);
+        // self.0.display(indentation + 4);
     }
 
     fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
@@ -166,7 +186,7 @@ impl Node for Return {
     fn push_child(&mut self, c: Box<dyn Node>) {}
 
     fn display(&self, indentation: usize) {
-        println!("{:>width$}-> Return:", "", width = indentation);
+        println!("{:>width$}└───[ {}:", "", "Return".red(), width = indentation);
 
         self.value.display(indentation + 4);
     }
@@ -174,7 +194,7 @@ impl Node for Return {
     fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
         // Ensure there is a current function return type set.
         let expected_return_type: Type;
-        
+
         if let Some(exp) = &ctx.current_function_return {
             // Analyze the expression and derive its type.
             // ... self.value.analyze(ctx)

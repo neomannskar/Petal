@@ -18,9 +18,9 @@ impl Node for Ast {
     }
 
     fn display(&self, indentation: usize) {
-        println!("{:>width$}-> AST Root", "", width = indentation);
+        println!("{:>width$}Abstract Syntax Tree", "", width = indentation);
         for child in &self.children {
-            child.display(indentation + 4);
+            child.display(indentation);
         }
     }
 
@@ -46,9 +46,13 @@ impl Node for Box<Ast> {
     }
 
     fn display(&self, indentation: usize) {
-        println!("{:>width$}-> AST Root", "", width = indentation);
+        println!(
+            "{:>width$}Abstract Syntax Tree\n┌───────────────────",
+            "",
+            width = indentation
+        );
         for child in &self.children {
-            child.display(indentation + 4);
+            child.display(indentation);
         }
     }
 

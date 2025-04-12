@@ -25,6 +25,9 @@ pub enum Token {
     Fslash,
     Percent,
 
+    Equal,
+    Walrus,
+
     LPar,
     RPar,
     LCurl,
@@ -46,7 +49,7 @@ pub enum Token {
     Colon,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Position {
     pub line: usize,
     pub index: usize,

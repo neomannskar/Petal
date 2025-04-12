@@ -2,6 +2,8 @@ fn add(a: i32, b: i32) -> i32 {
     ret a + b;
 }
 
-fn main() -> i32 {
-    ret add(add(1, 2), 3) + 4;
+fn main(x: i32) -> i32 {
+    x := add(add(1, 2), 3) + 4;
+    y: i32 = add(10, 11);
+    ret x;
 }

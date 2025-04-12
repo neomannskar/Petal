@@ -35,9 +35,9 @@ fn main() {
     let lexer = front::lexer::Lexer::new(&src);
     let tokens: Vec<(front::token::Token, Position)> = lexer.collect();
 
-    /* for (token, _) in &tokens {
-        dbg!(token);
-    } */
+    for (token, _) in &tokens {
+        println!("{:?}", token);
+    }
 
     let mut ctx = SemanticContext::new();
 

@@ -12,7 +12,7 @@ pub enum ReturnType {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum BasicType {
     FunctionDefinition(ReturnType),
-    
+
     Void,
     I32,
     I64,
@@ -48,9 +48,14 @@ impl Node for Type {
 
     fn display(&self, indentation: usize) {
         if let Some(basic) = &self.basic {
-            println!("{:>width$}-> Type: {:?}", "", basic, width = indentation);
+            println!("{:>width$}└───[ Type: {:?}", "", basic, width = indentation);
         } else {
-            println!("{:>width$}-> Type: {}", "", self.name, width = indentation);
+            println!(
+                "{:>width$}└───[ Type: {}",
+                "",
+                self.name,
+                width = indentation
+            );
         }
     }
 

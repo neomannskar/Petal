@@ -1,3 +1,5 @@
+use colored::Colorize;
+
 use crate::front::nodes::node::Node;
 use crate::front::nodes::operator::Operator;
 use crate::front::semantic::SemanticContext;
@@ -16,7 +18,7 @@ impl Node for BinaryExpr {
 
     fn display(&self, indentation: usize) {
         println!(
-            "{:>width$}-> BinaryExpr: Operator({:?})",
+            "{:>width$}└───[ {:?}",
             "",
             self.op,
             width = indentation
@@ -89,8 +91,7 @@ pub enum Expr {
     FunctionCall {
         function: String,
         arguments: Vec<Expr>,
-    }
-    // etc.
+    }, // etc.
 }
 
 impl Expr {
@@ -100,15 +101,13 @@ impl Expr {
                 name: "i32".to_string(),
                 basic: Some(BasicType::I32),
             },
-            Expr::Binary(bin) => {
-                match bin.analyze(ctx) {
-                    Ok(()) => { Type::basic("i32") }
-                    Err(e) => {
-                        eprintln!("{}", e);
-                        todo!();
-                    }
+            Expr::Binary(bin) => match bin.analyze(ctx) {
+                Ok(()) => Type::basic("i32"),
+                Err(e) => {
+                    eprintln!("{}", e);
+                    todo!();
                 }
-            }
+            },
             Expr::Identifier(id) => {
                 if let Some(t) = ctx.lookup(id) {
                     t.clone()
@@ -116,11 +115,14 @@ impl Expr {
                     todo!("");
                 }
             }
-            Expr::FunctionCall { function, arguments } => {
+            Expr::FunctionCall {
+                function,
+                arguments,
+            } => {
                 if let Some(t) = ctx.lookup(function) {
                     t.clone()
                 } else {
-                    todo!("");
+                    todo!("Failed to locate the function");
                 }
             }
         }
@@ -144,7 +146,9 @@ impl Expr {
                 }
             }
             // Expr::FunctionCall { function, arguments }
-            _ => { todo!("[_] Expr .get_type()") }
+            _ => {
+                todo!("[_] Expr .get_type()")
+            }
         }
     }
 }
@@ -155,24 +159,28 @@ impl Node for Expr {
     fn display(&self, indentation: usize) {
         match self {
             Expr::Number(value) => {
-                println!(
-                    "{:>width$}-> Expr: Number({})",
-                    "",
-                    value,
-                    width = indentation
-                );
+                println!("{:>width$}└───[ `{}`", "", value, width = indentation);
             }
             Expr::Binary(binary_expr) => {
-                println!("{:>width$}-> Expr: Binary", "", width = indentation);
-                binary_expr.display(indentation + 4);
+                // println!("{:>width$}└───[ Expr: Binary", "", width = indentation);
+                binary_expr.display(indentation /* + 4 */);
             }
             Expr::Identifier(id) => {
-                println!("{:>width$}-> Expr: `{}`", "", id, width = indentation);
+                println!("{:>width$}└───[ `{}`", "", id, width = indentation);
             }
             // Expr::FunctionCall { function, arguments }
-            Expr::FunctionCall{ function, arguments} => {
-                println!("{:>width$}-> FunctionCall: `{}`", "", function, width = indentation);
-                
+            Expr::FunctionCall {
+                function,
+                arguments,
+            } => {
+                println!(
+                    "{:>width$}└───[ {}: `{}`",
+                    "",
+                    "FnCall".green(),
+                    function,
+                    width = indentation
+                );
+
                 for expr in arguments {
                     expr.display(indentation + 4);
                 }
@@ -194,26 +202,23 @@ impl Node for Expr {
                 // Analyze the identifier node (ensures it's defined).
 
                 match ctx.lookup(id) {
-                    Some(t) => {
-                        Ok(())
-                    }
+                    Some(t) => Ok(()),
                     None => {
                         println!("{:?}", id);
                         Err(String::from("Identifier not found in hashmap?!"))
                     }
                 }
             }
-            Expr::FunctionCall { function, arguments } => {
-                match ctx.lookup(function) {
-                    Some(t) => {
-                        Ok(())
-                    }
-                    None => {
-                        println!("{:?}", function);
-                        Err(String::from("Identifier not found in hashmap?!"))
-                    }
+            Expr::FunctionCall {
+                function,
+                arguments,
+            } => match ctx.lookup(function) {
+                Some(t) => Ok(()),
+                None => {
+                    println!("{:?}", function);
+                    Err(String::from("Identifier not found in hashmap?!"))
                 }
-            }
+            },
         }
     }
 
@@ -240,7 +245,57 @@ impl Node for Expr {
                 }]
             }
             // Expr::FunctionCall { function, arguments }
-            _ => { todo!("[_] Expr .get_type()") }
+            _ => {
+                todo!("[_] Expr .get_type()")
+            }
         }
+    }
+}
+
+pub struct ExpressionStatement {
+    pub expression: Expr,
+}
+
+impl Node for ExpressionStatement {
+    fn push_child(&mut self, _c: Box<dyn Node>) {}
+
+    fn display(&self, indentation: usize) {
+        println!("{:>width$}└───[ ExprStat", "", width = indentation);
+        // Display the underlying expression; you could customize this as needed.
+        // For instance:
+        match &self.expression {
+            Expr::Number(n) => println!("{:>width$}-> Number({})", "", n, width = indentation + 4),
+            Expr::Binary(bin) => bin.display(indentation + 4),
+            Expr::Identifier(id) => println!(
+                "{:>width$}-> Identifier({})",
+                "",
+                id,
+                width = indentation + 4
+            ),
+            Expr::FunctionCall {
+                function,
+                arguments,
+            } => {
+                println!(
+                    "{:>width$}└───[ FnCall: `{}`",
+                    "",
+                    function,
+                    width = indentation + 4
+                );
+                for arg in arguments {
+                    // You could call display recursively if type Expr implements Node-like behavior.
+                    println!("{:>width$}└───[ Argument:", "", width = indentation + 8);
+                    arg.display(indentation + 12);
+                }
+            }
+        }
+    }
+
+    fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
+        self.expression.analyze(ctx)
+    }
+
+    fn ir(&self, ctx: &mut IRContext) -> Vec<IRInstruction> {
+        self.expression.ir(ctx)
     }
 }
