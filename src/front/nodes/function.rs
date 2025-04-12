@@ -112,11 +112,15 @@ impl Node for FunctionParameter {
     }
 
     fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
+        /* This is removed for now, later this logic should do this and not the parser
+
         if ctx.lookup(&self.id).is_some() {
-            return Err(format!("Parameter '{}' is already declared.", self.id));
+            return Err(format!("Parameter `{}` is already declared.", self.id));
         }
         // Insert the parameter into the symbol table.
         ctx.add_symbol(&self.id, Symbol::Variable(self.r#type.clone()));
+        
+        */
         Ok(())
     }
 

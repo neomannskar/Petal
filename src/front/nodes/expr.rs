@@ -252,7 +252,7 @@ impl Node for Expr {
                 // Analyze the identifier node (ensures it's defined).
 
                 match ctx.lookup(id) {
-                    Some(t) => Ok(()),
+                    Some(_s) => Ok(()),
                     None => {
                         println!("{:?}", id);
                         Err(String::from("Identifier not found in hashmap?!"))
@@ -277,7 +277,7 @@ impl Node for Expr {
                 function,
                 arguments,
             } => match ctx.lookup(function) {
-                Some(t) => Ok(()),
+                Some(_s) => Ok(()),
                 None => {
                     println!("{:?}", function);
                     Err(String::from("Identifier not found in hashmap?!"))
@@ -347,9 +347,10 @@ impl Node for ExpressionStatement {
             ),
             Expr::VariableCall { id, resolved } => {
                 println!(
-                    "{:>width$}└───[ VarCall: `{}`",
+                    "{:>width$}└───[ VarCall: `{}` : {:?}",
                     "",
                     id,
+                    resolved,
                     width = indentation + 4
                 );
             }

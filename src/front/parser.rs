@@ -539,8 +539,8 @@ impl Parser {
                 dbg!(&ctx.symbol_table);
 
                 match ctx.lookup(&id) {
-                    Some(t) => {
-                        Ok(Expr::VariableCall{ id, resolved: Some(t.clone()) } )
+                    Some(s) => {
+                        Ok(Expr::VariableCall{ id, resolved: Some(s.clone()) } )
                     }
                     None => {
                         Ok(Expr::Identifier(id))
@@ -716,7 +716,12 @@ impl Parser {
             }
         };
 
-        ctx.add_symbol(&id, Symbol::Variable(var_type.clone()));
+        match ctx.lookup(&id) {
+            Some(s) => {
+                return Err(ParserError::GenericError(String::from(format!("Id: `{}` is already defined as {:?}", id, s))))
+            }
+            None => { ctx.add_symbol(&id, Symbol::Variable(var_type.clone())) }
+        }
 
         // At this point, we've parsed "<id> : <type>"
         // Check if the next token is an assignment operator.
@@ -772,7 +777,7 @@ impl Parser {
     ) -> Result<Box<dyn Node>, ParserError> {
         // Pattern: Identifier, Walrus, Expression, Semicolon.
         let (id_token, _) = self.consume()?; // Identifier
-        let id_name = if let Token::Identifier(name) = id_token {
+        let id = if let Token::Identifier(name) = id_token {
             name
         } else {
             unreachable!()
@@ -800,8 +805,10 @@ impl Parser {
             });
         }
 
+        ctx.add_symbol(&id, Symbol::Variable(Type::Custom(String::from("<inferred>"))));
+
         Ok(Box::new(WalrusDeclaration {
-            id: id_name,
+            id: id,
             initializer: expr,
         }))
     }

@@ -15,7 +15,7 @@ pub struct Identifier {
 
 impl Identifier {
     pub fn new<T: ToString>(name: T, ctx: &mut SemanticContext) -> Self {
-        if let Some(t) = ctx.lookup(&Identifier { name: name.to_string(), id: _ }) {
+        if let Some(_s) = ctx.lookup(&Identifier { name: name.to_string(), id: _ }) {
 
         }
 

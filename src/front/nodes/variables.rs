@@ -23,11 +23,15 @@ impl Node for VariableDeclaration {
         );
     }
     fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
+        /* This is removed for now, later this logic should do this and not the parser
+
         if ctx.lookup(&self.id).is_some() {
             return Err(format!("Variable '{}' already declared", self.id));
         }
         // Add to symbol table.
         ctx.add_symbol(&self.id, Symbol::Variable(self.var_type.clone()));
+        
+        */
         Ok(())
     }
     fn ir(&self, _ctx: &mut crate::middle::ir::IRContext) -> Vec<crate::middle::ir::IRInstruction> {
