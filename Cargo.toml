@@ -6,4 +6,11 @@ edition = "2021"
 [dependencies]
 clap = "4.5.34"
 colored = "3.0.0"
-rand = "0.9.0"
+dhat = "0.3.3"
+
+[features]
+dhat-heap = []    # Enable heap profiling
+dhat-ad-hoc = []  # Enable ad hoc profiling
+
+[profile.release]
+debug = true  # Include debug symbols for accurate profiling

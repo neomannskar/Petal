@@ -5,22 +5,28 @@ use crate::{
     middle::ir::{IRContext, IRInstruction},
 };
 
-use super::semantic::SemanticContext;
+use super::{semantic::SemanticContext, token::Position};
 
 pub struct Ast {
-    pub children: Vec<Box<dyn Node>>,
+    pub children: Vec<(Box<dyn Node>, Position)>,
     pub ids: HashMap<String, Rc<Box<dyn Node>>>,
 }
 
 impl Node for Ast {
     fn display(&self, indentation: usize) {
-        println!("{:>width$}Abstract Syntax Tree", "", width = indentation);
-        for child in &self.children {
+        println!(
+            "{:>width$}Abstract Syntax Tree\n",
+            "",
+            width = indentation
+        );
+        for (child, pos) in &self.children {
+            let pos = format!("{}:{}", pos.line, pos.index);
+            print!("{}{} |", pos, " ".repeat(10 - pos.len()));
             child.display(indentation);
         }
     }
 
-    fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
+    fn analyze(&self, _ctx: &mut SemanticContext) -> Result<(), String> {
         Ok(())
     }
 
@@ -28,7 +34,7 @@ impl Node for Ast {
         let mut instructions = Vec::new();
 
         // Generate IR for parameters
-        for child in &self.children {
+        for (child, _) in &self.children {
             instructions.extend(child.ir(ctx));
         }
 
@@ -39,16 +45,18 @@ impl Node for Ast {
 impl Node for Box<Ast> {
     fn display(&self, indentation: usize) {
         println!(
-            "{:>width$}Abstract Syntax Tree\n┌───────────────────",
+            "{:>width$}Abstract Syntax Tree\n",
             "",
             width = indentation
         );
-        for child in &self.children {
+        for (child, pos) in &self.children {
+            let pos = format!("{}:{}", pos.line, pos.index);
+            print!("{}{} |", pos, " ".repeat(10 - pos.len()));
             child.display(indentation);
         }
     }
 
-    fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
+    fn analyze(&self, _ctx: &mut SemanticContext) -> Result<(), String> {
         Ok(())
     }
 
@@ -56,7 +64,7 @@ impl Node for Box<Ast> {
         let mut instructions = Vec::new();
 
         // Generate IR for parameters
-        for child in &self.children {
+        for (child, _) in &self.children {
             instructions.extend(child.ir(ctx));
         }
 

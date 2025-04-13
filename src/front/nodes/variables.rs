@@ -1,6 +1,6 @@
 use colored::Colorize;
 
-use crate::front::semantic::{SemanticContext, Symbol};
+use crate::front::{semantic::{SemanticContext, Symbol}, token::Position};
 
 use super::{expr::Expr, node::Node, r#type::Type};
 
@@ -20,7 +20,7 @@ impl Node for VariableDeclaration {
             width = indentation
         );
     }
-    fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
+    fn analyze(&self, _ctx: &mut SemanticContext) -> Result<(), String> {
         /* This is removed for now, later this logic should do this and not the parser
 
         if ctx.lookup(&self.id).is_some() {
@@ -67,7 +67,7 @@ impl Node for Assignment {
 
 pub struct WalrusDeclaration {
     pub id: String,        // variable name
-    pub initializer: Expr, // storing the initializer expression
+    pub _initializer: Expr, // storing the initializer expression
 }
 
 impl Node for WalrusDeclaration {
@@ -80,7 +80,7 @@ impl Node for WalrusDeclaration {
             width = indentation
         );
     }
-    fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
+    fn analyze(&self, _ctx: &mut SemanticContext) -> Result<(), String> {
         /*
 
         if ctx.lookup(&self.id).is_some() {
@@ -103,8 +103,8 @@ impl Node for WalrusDeclaration {
 
 // A combined declaration and assignment node.
 pub struct DeclarationAssignment {
-    pub declaration: VariableDeclaration,
-    pub assignment: Assignment,
+    pub declaration: (VariableDeclaration, Position),
+    pub assignment: (Assignment, Position),
 }
 
 impl Node for DeclarationAssignment {
@@ -115,16 +115,23 @@ impl Node for DeclarationAssignment {
             "DeclAssign".red(),
             width = indentation
         );
-        self.declaration.display(indentation + 4);
-        self.assignment.display(indentation + 4);
+        let pos = format!("{}:{}", self.declaration.1.line, self.declaration.1.index);
+        print!("{}{} |", pos, " ".repeat(10 - pos.len()));
+        self.declaration.0.display(indentation + 4);
+        
+        let pos = format!("{}:{}", self.assignment.1.line, self.assignment.1.index);
+        print!("{}{} |", pos, " ".repeat(10 - pos.len()));
+        self.assignment.0.display(indentation + 4);
     }
+
     fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
         // First analyze the declaration.
-        self.declaration.analyze(ctx)?;
+        self.declaration.0.analyze(ctx)?;
         // Then check the assignment's lhs is declared.
-        self.assignment.analyze(ctx)
+        self.assignment.0.analyze(ctx)
     }
-    fn ir(&self, ctx: &mut crate::middle::ir::IRContext) -> Vec<crate::middle::ir::IRInstruction> {
+
+    fn ir(&self, _ctx: &mut crate::middle::ir::IRContext) -> Vec<crate::middle::ir::IRInstruction> {
         // Later: generate IR for both parts.
         Vec::new()
     }

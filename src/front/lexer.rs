@@ -105,10 +105,12 @@ impl<'a> Lexer<'a> {
                     return Some((self.character_literal(), self.position.clone()));
                 }
                 '0'..='9' => {
-                    return Some((self.number(), self.position.clone()));
+                    let pos = self.position.clone();
+                    return Some((self.number(), pos));
                 }
                 'a'..='z' | 'A'..='Z' | '_' => {
-                    return Some((self.identifier_or_keyword(), self.position.clone()));
+                    let pos = self.position.clone();
+                    return Some((self.identifier_or_keyword(), pos));
                 }
                 '+' => {
                     self.input.next();
@@ -117,15 +119,16 @@ impl<'a> Lexer<'a> {
                 }
                 '-' => {
                     self.input.next(); // Consume '-'
+                    let pos = self.position.clone();
                     self.update_position(ch);
                     if let Some(&next_ch) = self.input.peek() {
                         if next_ch == '>' {
                             self.input.next();
                             self.update_position(next_ch);
-                            return Some((Token::Arrow, self.position.clone()));
+                            return Some((Token::Arrow, pos));
                         }
                     }
-                    return Some((Token::Minus, self.position.clone()));
+                    return Some((Token::Minus, pos));
                 }
                 '*' => {
                     self.input.next();
@@ -203,15 +206,16 @@ impl<'a> Lexer<'a> {
                 }
                 ':' => {
                     self.input.next();
+                    let pos = self.position.clone();
                     self.update_position(ch);
                     if let Some(&next_ch) = self.input.peek() {
                         if next_ch == '=' {
                             self.input.next(); // Consume '='
                             self.update_position(next_ch);
-                            return Some((Token::Walrus, self.position.clone()));
+                            return Some((Token::Walrus, pos));
                         }
                     }
-                    return Some((Token::Colon, self.position.clone()));
+                    return Some((Token::Colon, pos));
                 }
                 _ => {
                     self.input.next();

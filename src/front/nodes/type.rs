@@ -1,10 +1,12 @@
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PrimitiveType {
     Void,
+    Char,
     I32,
     I64,
     U32,
     U64,
+    Str,
     // You can add more primitives if needed.
 }
 
@@ -37,11 +39,13 @@ impl Type {
     /// A helper to quickly generate a basic (primitive) type.
     pub fn basic(name: &str) -> Self {
         match name {
+            "char" => Type::Primitive(PrimitiveType::Char),
             "i32" => Type::Primitive(PrimitiveType::I32),
             "i64" => Type::Primitive(PrimitiveType::I64),
             "u32" => Type::Primitive(PrimitiveType::U32),
             "u64" => Type::Primitive(PrimitiveType::U64),
             "void" => Type::Primitive(PrimitiveType::Void),
+            "str" => Type::Primitive(PrimitiveType::Str),
             _ => Type::Custom(name.to_string()),
         }
     }

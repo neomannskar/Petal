@@ -3,14 +3,16 @@ use colored::Colorize;
 use crate::front::nodes::node::Node;
 use crate::front::nodes::operator::Operator;
 use crate::front::semantic::{SemanticContext, Symbol};
+use crate::front::token::Position;
 use crate::middle::ir::{IRContext, IRInstruction};
 
 use super::r#type::Type;
 
+#[derive(Debug, Clone)]
 pub struct BinaryExpr {
     pub op: Operator,
-    pub left: Expr,
-    pub right: Expr,
+    pub left: (Expr, Position),
+    pub right: (Expr, Position),
 }
 
 impl Node for BinaryExpr {
@@ -21,18 +23,16 @@ impl Node for BinaryExpr {
             self.op,
             width = indentation
         );
-        self.left.display(indentation + 4);
-        self.right.display(indentation + 4);
     }
 
     fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
         // Analyze left and right operands.
-        self.left.analyze(ctx)?;
-        self.right.analyze(ctx)?;
+        self.left.0.analyze(ctx)?;
+        self.right.0.analyze(ctx)?;
 
         // Infer types for both operands.
-        let left_type = self.left.get_type(ctx);
-        let right_type = self.right.get_type(ctx);
+        let left_type = self.left.0.get_type(ctx);
+        let right_type = self.right.0.get_type(ctx);
 
         // Check type compatibility (for example, both must be numbers for arithmetic ops).
         if left_type != right_type {
@@ -47,11 +47,11 @@ impl Node for BinaryExpr {
         let mut instructions = Vec::new();
 
         // Generate IR for the left operand
-        let left_ir = self.left.ir(ctx);
+        let left_ir = self.left.0.ir(ctx);
         instructions.extend(left_ir); // Add left operand's instructions
 
         // Generate IR for the right operand
-        let right_ir = self.right.ir(ctx);
+        let right_ir = self.right.0.ir(ctx);
         instructions.extend(right_ir); // Add right operand's instructions
 
         // Allocate a temporary register for the result of this binary operation
@@ -82,19 +82,20 @@ impl Node for BinaryExpr {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum Expr {
-    Number(i64),
-    Character(char),
-    String(String),
-    Binary(Box<BinaryExpr>),
-    Identifier(String),
+    Number((i64, Position)),
+    Character((char, Position)),
+    String((String, Position)),
+    Binary((Box<BinaryExpr>, Position)),
+    Identifier((String, Position)),
     VariableCall {
-        id: String,
-        resolved: Option<Symbol>,
+        id: (String, Position),
+        resolved: Option<(Symbol, Position)>,
     },
     FunctionCall {
-        function: String,
-        arguments: Vec<Expr>,
+        function: (String, Position),
+        arguments: Vec<(Expr, Position)>,
     },
     // etc.
 }
@@ -113,13 +114,13 @@ impl Expr {
             Expr::String(_) => {
                 Type::basic("str")
             }
-            Expr::Binary(bin) => {
+            Expr::Binary((bin, _)) => {
                 // For simplicity, we assume that a binary expression is valid and
                 // its type is that of its left side.
-                bin.left.get_type(ctx)
+                bin.left.0.get_type(ctx)
             }
-            Expr::Identifier(id) => {
-                if let Some(symbol) = ctx.lookup(id) {
+            Expr::Identifier((id, _)) => {
+                if let Some((symbol, _)) = ctx.lookup(id) {
                     match symbol {
                         Symbol::Variable(t) => t.clone(),
                         Symbol::Function(func_type) => Type::Function(func_type.clone()),
@@ -131,26 +132,26 @@ impl Expr {
                 }
             }
             Expr::VariableCall { id, resolved: _ } => {
-                if let Some(symbol) = ctx.lookup(id) {
+                if let Some((symbol, _)) = ctx.lookup(&id.0) {
                     if let Symbol::Variable(var_type) = symbol {
                         var_type.clone()
                     } else {
-                        panic!("Identifier `{}` is not a variable", id);
+                        panic!("Identifier `{}` is not a variable", id.0);
                     }
                 } else {
-                    panic!("Failed to locate the variable `{}`", id);
+                    panic!("Failed to locate the variable `{}`", id.0);
                 }
             }
             Expr::FunctionCall { function, arguments: _ } => {
-                if let Some(symbol) = ctx.lookup(function) {
+                if let Some((symbol, _)) = ctx.lookup(&function.0) {
                     // Expect the looked-up symbol to be a function.
                     if let Symbol::Function(func_type) = symbol {
                         *func_type.return_type.clone()
                     } else {
-                        panic!("Identifier `{}` is not a function", function);
+                        panic!("Identifier `{}` is not a function", function.0);
                     }
                 } else {
-                    panic!("Failed to locate the function '{}'", function);
+                    panic!("Failed to locate the function '{}'", function.0);
                 }
             }
         }
@@ -162,9 +163,9 @@ impl Expr {
             Expr::Number(_) => Ok(Type::basic("i32")),
             Expr::Character(_) => Ok(Type::basic("char")),
             Expr::String(_) => Ok(Type::basic("str")),
-            Expr::Binary(bin_expr) => bin_expr.left.infer_type(ctx),
-            Expr::Identifier(id) => {
-                if let Some(symbol) = ctx.lookup(id) {
+            Expr::Binary((bin_expr, _)) => bin_expr.left.0.infer_type(ctx),
+            Expr::Identifier((id, _)) => {
+                if let Some((symbol, _)) = ctx.lookup(id) {
                     match symbol {
                         Symbol::Variable(t) => Ok(t.clone()),
                         Symbol::Function(func_type) => Ok(Type::Function(func_type.clone())),
@@ -175,25 +176,25 @@ impl Expr {
                 }
             }
             Expr::VariableCall { id, resolved: _ } => {
-                if let Some(symbol) = ctx.lookup(id) {
+                if let Some((symbol, _)) = ctx.lookup(&id.0) {
                     if let Symbol::Variable(var_type) = symbol {
                         Ok(var_type.clone())
                     } else {
-                        Err(format!("Identifier '{}' is not a function", id))
+                        Err(format!("Identifier '{}' is not a function", id.0))
                     }
                 } else {
-                    Err(format!("Failed to locate function '{}'", id))
+                    Err(format!("Failed to locate function '{}'", id.0))
                 }
             }
             Expr::FunctionCall { function, arguments: _ } => {
-                if let Some(symbol) = ctx.lookup(function) {
+                if let Some((symbol, _)) = ctx.lookup(&function.0) {
                     if let Symbol::Function(func_type) = symbol {
                         Ok(*func_type.return_type.clone())
                     } else {
-                        Err(format!("Identifier '{}' is not a function", function))
+                        Err(format!("Identifier '{}' is not a function", function.0))
                     }
                 } else {
-                    Err(format!("Failed to locate function '{}'", function))
+                    Err(format!("Failed to locate function '{}'", function.0))
                 }
             }
         }
@@ -203,20 +204,33 @@ impl Expr {
 impl Node for Expr {
     fn display(&self, indentation: usize) {
         match self {
-            Expr::Number(value) => {
+            Expr::Number((value, _)) => {
                 println!("{:>width$}└───[ `{}`", "", value, width = indentation);
             }
-            Expr::Character(ch) => {
+            Expr::Character((ch, _)) => {
                 println!("{:>width$}└───[ '{}'", "", ch, width = indentation);
             }
-            Expr::String(str) => {
-                println!("{:>width$}└───[ \"{}\"", "", str.replace("\n", ""), width = indentation);
+            Expr::String((str, _)) => {
+                println!("{:>width$}└───[ \"{}\"", "", str.replace("\n", "").replace("\r", ""), width = indentation);
             }
-            Expr::Binary(binary_expr) => {
-                // println!("{:>width$}└───[ Expr: Binary", "", width = indentation);
-                binary_expr.display(indentation /* + 4 */);
+            Expr::Binary((binary_expr, _)) => {
+                println!(
+                    "{:>width$}└───[ {}: {:?}",
+                    "",
+                    "Expr".magenta(),
+                    binary_expr.op,
+                    width = indentation
+                );
+
+                let pos = format!("{}:{}", binary_expr.left.1.line, binary_expr.left.1.index);
+                print!("{}{} |", pos, " ".repeat(10 - pos.len()));
+                binary_expr.left.0.display(indentation + 4);
+                
+                let pos = format!("{}:{}", binary_expr.right.1.line, binary_expr.right.1.index);
+                print!("{}{} |", pos, " ".repeat(10 - pos.len()));
+                binary_expr.right.0.display(indentation + 4);
             }
-            Expr::Identifier(id) => {
+            Expr::Identifier((id, _)) => {
                 println!(
                     "{:>width$}└───[ {}: `{}`",
                     "",
@@ -230,7 +244,7 @@ impl Node for Expr {
                     "{:>width$}└───[ {}: `{}` : {:?}",
                     "",
                     "VarCall".red(),
-                    id,
+                    id.0,
                     resolved,
                     width = indentation
                 );
@@ -243,12 +257,14 @@ impl Node for Expr {
                     "{:>width$}└───[ {}: `{}`",
                     "",
                     "FnCall".green(),
-                    function,
+                    function.0,
                     width = indentation
                 );
 
-                for expr in arguments {
-                    expr.display(indentation + 4);
+                for (expr, pos) in arguments {
+                    let pos = format!("{}:{}", pos.line, pos.index);
+                    print!("{}{} |", pos, " ".repeat(10 - pos.len()));
+                    expr.display(indentation + (10 - pos.len()) + 4);
                 }
             }
         }
@@ -266,11 +282,11 @@ impl Node for Expr {
             Expr::String(_) => {
                 Ok(())
             }
-            Expr::Binary(bin_expr) => {
+            Expr::Binary((bin_expr, _)) => {
                 // Delegate to BinaryExpr's analysis.
                 bin_expr.analyze(ctx)
             }
-            Expr::Identifier(id) => {
+            Expr::Identifier((id, _)) => {
                 // Analyze the identifier node (ensures it's defined).
 
                 match ctx.lookup(id) {
@@ -282,23 +298,23 @@ impl Node for Expr {
                 }
             }
             Expr::VariableCall { id, resolved: _ } => {
-                if let Some(symbol) = ctx.lookup(id) {
+                if let Some((symbol, _)) = ctx.lookup(&id.0) {
                     if let Symbol::Variable(_var_type) = symbol {
                         // Optionally, you could even update the node with the resolved symbol,
                         // so later phases have immediate access to things like memory offsets.
                         // resolved = Some(symbol.clone());
                         Ok(())
                     } else {
-                        Err(format!("Identifier '{}' is not a variable", id))
+                        Err(format!("Identifier '{}' is not a variable", id.0))
                     }
                 } else {
-                    Err(format!("Undefined variable: {}", id))
+                    Err(format!("Undefined variable: {}", id.0))
                 }
             }
             Expr::FunctionCall {
                 function,
-                arguments,
-            } => match ctx.lookup(function) {
+                arguments: _, // Add later a check for what the function in the symbol table accepts as arguments.
+            } => match ctx.lookup(&function.0) {
                 Some(_s) => Ok(()),
                 None => {
                     println!("{:?}", function);
@@ -310,7 +326,7 @@ impl Node for Expr {
 
     fn ir(&self, ctx: &mut IRContext) -> Vec<IRInstruction> {
         match self {
-            Expr::Number(value) => {
+            Expr::Number((value, _)) => {
                 // Load the constant into a new temporary register
                 let dest = ctx.allocate_temp();
                 vec![IRInstruction::Load {
@@ -318,11 +334,11 @@ impl Node for Expr {
                     src: value.to_string(),
                 }]
             }
-            Expr::Binary(binary_expr) => {
+            Expr::Binary((binary_expr, _)) => {
                 // Delegate to the BinaryExpr's ir() method
                 binary_expr.ir(ctx)
             }
-            Expr::Identifier(id) => {
+            Expr::Identifier((id, _)) => {
                 // Reference an identifier
                 let dest = ctx.allocate_temp();
                 vec![IRInstruction::Load {
@@ -333,11 +349,11 @@ impl Node for Expr {
             Expr::VariableCall { id, resolved } => {
                 // Here you would generate the proper IR load instruction.
                 // If `resolved` is set, you can retrieve extra info (e.g. memory location).
-                let symbol = resolved.as_ref().expect("Symbol should be resolved by now");
+                let _symbol = resolved.as_ref().expect("Symbol should be resolved by now");
                 // For example:
                 vec![IRInstruction::LoadVariable {
                     dest: ctx.allocate_temp(),
-                    variable: id.clone(),
+                    variable: id.0.clone(),
                     // possibly more fields based on 'symbol'
                 }]
             },
@@ -359,11 +375,11 @@ impl Node for ExpressionStatement {
         // Display the underlying expression; you could customize this as needed.
         // For instance:
         match &self.expression {
-            Expr::Number(n) => println!("{:>width$}-> Number({})", "", n, width = indentation + 4),
-            Expr::Character(ch) => println!("{:>width$}-> Character('{}')", "", ch, width = indentation + 4),
-            Expr::String(str) => println!("{:>width$}-> String(\"{}\")", "", str, width = indentation + 4),
-            Expr::Binary(bin) => bin.display(indentation + 4),
-            Expr::Identifier(id) => println!(
+            Expr::Number((n, _)) => println!("{:>width$}-> Number({})", "", n, width = indentation + 4),
+            Expr::Character((ch, _)) => println!("{:>width$}-> Character('{}')", "", ch, width = indentation + 4),
+            Expr::String((str, _)) => println!("{:>width$}-> String(\"{}\")", "", str, width = indentation + 4),
+            Expr::Binary((bin, _)) => bin.display(indentation + 4),
+            Expr::Identifier((id, _)) => println!(
                 "{:>width$}-> Identifier({})",
                 "",
                 id,
@@ -373,7 +389,7 @@ impl Node for ExpressionStatement {
                 println!(
                     "{:>width$}└───[ VarCall: `{}` : {:?}",
                     "",
-                    id,
+                    id.0,
                     resolved,
                     width = indentation + 4
                 );
@@ -385,12 +401,13 @@ impl Node for ExpressionStatement {
                 println!(
                     "{:>width$}└───[ FnCall: `{}`",
                     "",
-                    function,
+                    function.0,
                     width = indentation + 4
                 );
-                for arg in arguments {
-                    // You could call display recursively if type Expr implements Node-like behavior.
-                    println!("{:>width$}└───[ Argument:", "", width = indentation + 8);
+                for (arg, pos) in arguments {
+                    let pos = format!("{}:{}", pos.line, pos.index);
+                    print!("{}{} |", pos, " ".repeat(10 - pos.len()));
+                    println!("{:>width$}└───[ Argument:", "", width = indentation + (10 - pos.len()) + 8);
                     arg.display(indentation + 12);
                 }
             }

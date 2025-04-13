@@ -12,7 +12,7 @@ mod config;
 mod front;
 mod middle;
 
-macro_rules! here {
+macro_rules! _here {
     () => {
         println!(
             "Execution passed through here:\n\tfile: {}\n\tline: {}",
