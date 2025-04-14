@@ -39,7 +39,7 @@ impl Node for VariableDeclaration {
 
 pub struct Assignment {
     pub lhs: String, // For now, just the variable name.
-    pub value: Expr,
+    pub value: (Expr, Position),
 }
 
 impl Node for Assignment {
@@ -52,7 +52,9 @@ impl Node for Assignment {
             width = indentation
         );
         
-        self.value.display(indentation + 4);
+        let pos = format!("{}:{}", self.value.1.line, self.value.1.index);
+        print!("{}{} |", pos, " ".repeat(10 - pos.len()));
+        self.value.0.display(indentation + 4);
     }
     fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
         if ctx.lookup(&self.lhs).is_none() {
@@ -67,7 +69,7 @@ impl Node for Assignment {
 
 pub struct WalrusDeclaration {
     pub id: String,        // variable name
-    pub _initializer: Expr, // storing the initializer expression
+    pub _initializer: (Expr, Position), // storing the initializer expression
 }
 
 impl Node for WalrusDeclaration {

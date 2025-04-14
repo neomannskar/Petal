@@ -691,7 +691,7 @@ impl Parser {
         }
 
         // Build and return an Assignment node.
-        Ok((Box::new(Assignment { lhs, value: expr }), pos))
+        Ok((Box::new(Assignment { lhs, value: (expr, pos.clone()) }), pos))
     }
 
     fn parse_explicit_decl(
@@ -771,7 +771,7 @@ impl Parser {
             // ...and an assignment node with lhs being the variable name.
             let assign = Assignment {
                 lhs: id,
-                value: initializer_expr,
+                value: (initializer_expr, pos.clone()),
             };
             // Combine them into a DeclarationAssignment node.
             Ok((Box::new(DeclarationAssignment {
@@ -829,11 +829,11 @@ impl Parser {
             });
         }
 
-        ctx.add_symbol(&id, (Symbol::Variable(Type::Custom(String::from("<inferred>"))), expr_pos));
+        ctx.add_symbol(&id, (Symbol::Variable(Type::Custom(String::from("<inferred>"))), expr_pos.clone()));
 
         Ok((Box::new(WalrusDeclaration {
             id: id,
-            _initializer: expr,
+            _initializer: (expr, expr_pos),
         }), pos))
     }
 
