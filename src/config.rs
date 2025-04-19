@@ -6,6 +6,7 @@ pub struct PetalConfig {
     pub src: PathBuf,
     pub output_file_name: String,
     pub debug_mode: bool,
+    pub target: String,
 }
 
 impl PetalConfig {
@@ -50,6 +51,7 @@ impl PetalConfig {
             src,
             output_file_name,
             debug_mode,
+            target: String::new(),
         }
     }
 }

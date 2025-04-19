@@ -10,6 +10,7 @@ pub enum Symbol {
     // etc.
 }
 
+#[derive(Debug)]
 pub struct SemanticContext {
     // Keyed by name (String) for ease of lookup.
     pub symbol_table: HashMap<String, (Symbol, Position)>,
@@ -53,18 +54,19 @@ impl SemanticContext {
 
 pub struct SemanticAnalyzer {
     ast: Box<Ast>,
+    ctx: SemanticContext,
 }
 
 impl SemanticAnalyzer {
     pub fn new(ast: Box<Ast>) -> SemanticAnalyzer {
-        SemanticAnalyzer { ast }
+        SemanticAnalyzer { ast, ctx: SemanticContext::new() }
     }
 
-    pub fn analyze(self, ctx: &mut SemanticContext) -> Result<Box<Ast>, String> {
+    pub fn analyze(mut self) -> Result<Box<Ast>, String> {
         // Analyze each child node of the AST
+
         for (node, _) in self.ast.children.iter() {
-            
-            node.analyze(ctx)?;
+            node.analyze(&mut self.ctx)?;
         }
 
         // dbg!(&ctx.symbol_table);

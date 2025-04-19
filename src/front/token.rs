@@ -1,4 +1,4 @@
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     Unknown(char),
     Eof,
@@ -18,7 +18,7 @@ pub enum Token {
     While,
 
     NumberLiteral(String), // Stores both integers and floats as strings
-    CharacterLiteral(char),
+    CharacterLiteral(String),
     StringLiteral(String),
 
     Plus,
@@ -26,6 +26,13 @@ pub enum Token {
     Asterisk,
     Fslash,
     Percent,
+    Ampersand,
+    Pipe,
+
+    And,
+    Or,
+    Not,
+    Compare,
 
     Equal,
     Walrus,
@@ -52,7 +59,7 @@ pub enum Token {
     Colon,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Position {
     pub line: usize,
     pub index: usize,

@@ -7,14 +7,14 @@ use crate::front::semantic::SemanticContext;
 
 static IDENTIFIER_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Identifier {
     pub name: String,
     pub id: usize,
 }
 
 impl Identifier {
-    pub fn new<T: ToString>(name: T, ctx: &mut SemanticContext) -> Self {
+    pub fn new<T: ToString>(name: T) -> Self {
         if let Some(_s) = ctx.lookup(&Identifier { name: name.to_string(), id: _ }) {
 
         }
@@ -56,7 +56,7 @@ impl Node for Identifier {
         );
     }
 
-    fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
+    fn analyze(&self) -> Result<(), String> {
         // Ensure the identifier exists in the current or parent scopes
         if ctx.lookup(self).is_none() {
             return Err(format!("Undefined identifier: {}", self.name));
@@ -64,7 +64,7 @@ impl Node for Identifier {
         Ok(())
     }
 
-    fn ir(&self, ctx: &mut crate::middle::ir::IRContext) -> Vec<crate::middle::ir::IRInstruction> {
+    fn ir(&self, _ctx: &mut IRContext) -> Vec<IRInstruction> {
         Vec::new()
     }
 }

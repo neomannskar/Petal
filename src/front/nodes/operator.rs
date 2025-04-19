@@ -10,4 +10,10 @@ pub enum Operator {
     Asterisk,
     Fslash,
     Percent, // Modulus,
+    And,
+    Or,
+    Xor,
+    Not,
+    ShiftLeft,
+    ShiftRight,
 }

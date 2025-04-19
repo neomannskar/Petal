@@ -3,9 +3,8 @@ fn add(a: i32, b: i32) -> i32 {
 }
 
 fn main() -> i32 {
-    x: i32 = 0;
-    x = add(add(1, 2), 3) + 4;
-    r := 10;
-    s: str = "Hello World!\n"; 
-    ret add(x, 10);
+    if 0 {
+        ret 0;
+    }
+    ret add(1, 2);
 }

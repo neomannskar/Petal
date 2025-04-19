@@ -2,10 +2,13 @@
 pub enum PrimitiveType {
     Void,
     Char,
+    Bool,
     I32,
     I64,
     U32,
     U64,
+    F32,
+    F64,
     Str,
     // You can add more primitives if needed.
 }

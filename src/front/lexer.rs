@@ -130,6 +130,32 @@ impl<'a> Lexer<'a> {
                     }
                     return Some((Token::Minus, pos));
                 }
+                '&' => {
+                    self.input.next(); // Consume '-'
+                    let pos = self.position.clone();
+                    self.update_position(ch);
+                    if let Some(&next_ch) = self.input.peek() {
+                        if next_ch == '&' {
+                            self.input.next();
+                            self.update_position(next_ch);
+                            return Some((Token::And, pos));
+                        }
+                    }
+                    return Some((Token::Ampersand, pos));
+                }
+                '|' => {
+                    self.input.next(); // Consume '-'
+                    let pos = self.position.clone();
+                    self.update_position(ch);
+                    if let Some(&next_ch) = self.input.peek() {
+                        if next_ch == '&' {
+                            self.input.next();
+                            self.update_position(next_ch);
+                            return Some((Token::Or, pos));
+                        }
+                    }
+                    return Some((Token::Pipe, pos));
+                }
                 '*' => {
                     self.input.next();
                     self.update_position(ch);
@@ -362,7 +388,7 @@ impl<'a> Lexer<'a> {
                 self.update_position('\'');
             }
         }
-        Token::CharacterLiteral(char_val.unwrap_or('\0'))
+        Token::CharacterLiteral(char_val.unwrap_or('\0').to_string())
     }
 
     pub fn lex(self) -> Vec<(Token, Position)> {

@@ -121,13 +121,13 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self, ctx: &mut SemanticContext) -> Result<Box<Ast>, ParserError> {
+    pub fn parse(&mut self) -> Result<Box<Ast>, ParserError> {
         let mut ast = Box::new(Ast::new());
 
         while let Ok((token, pos)) = self.consume() {
             match token {
                 Token::Fn => {
-                    match self.parse_fn(ctx) {
+                    match self.parse_fn() {
                         Ok((func, pos)) => {
                             ast.children.push((Box::new(func), pos));
                         }
@@ -152,8 +152,7 @@ impl Parser {
     }
 
     pub fn parse_fn<'a>(
-        &mut self,
-        ctx: &mut SemanticContext,
+        &mut self
     ) -> Result<(FunctionDefinition, Position), ParserError> {
         // Expect a function name
         let (func_name, func_pos) = match self.consume() {
@@ -168,7 +167,7 @@ impl Parser {
             Err(e) => return Err(e),
         };
 
-        let parameters = match self.parse_fn_parameters(ctx) {
+        let parameters = match self.parse_fn_parameters() {
             Ok(params) => params,
             Err(e) => {
                 return Err(e);
@@ -185,15 +184,13 @@ impl Parser {
         };
 
         // Parse the function body
-        let (body, body_pos) = match self.parse_fn_body(ctx) {
+        let (body, body_pos) = match self.parse_fn_body() {
             Ok(bod) => bod,
             Err(e) => {
                 // Change later
                 return Err(e);
             }
         };
-
-        println!("FUNCTION NAME POSITION: {} : {}", func_pos.line, func_pos.index);
 
         Ok((FunctionDefinition {
             id: (func_name, func_pos.clone()),
@@ -204,8 +201,7 @@ impl Parser {
     }
 
     fn parse_fn_parameters(
-        &mut self,
-        ctx: &mut SemanticContext,
+        &mut self
     ) -> Result<Vec<(FunctionParameter, Position)>, ParserError> {
         let mut parameters = Vec::new();
 
@@ -281,12 +277,11 @@ impl Parser {
                 }
             };
 
-            ctx.add_symbol(&param_name, (Symbol::Variable(param_type.clone()), type_pos.clone()));
-
             // Create the function parameter.
             parameters.push((FunctionParameter {
                 id: param_name,
-                r#type: param_type,
+                var_type: param_type,
+                position: pos.clone(),
             }, pos.clone()));
 
             // Now, check if there is a comma or the close parenthesis.
@@ -367,7 +362,7 @@ impl Parser {
         }
     }
 
-    fn parse_fn_body(&mut self, ctx: &mut SemanticContext) -> Result<(FunctionBody, Position), ParserError> {
+    fn parse_fn_body(&mut self) -> Result<(FunctionBody, Position), ParserError> {
         // Expect an opening curly brace and consume it.
         let (lcurly, pos) = self.consume()?;
         if lcurly != Token::LCurl {
@@ -388,7 +383,7 @@ impl Parser {
                 // End of function body reached.
                 break;
             }
-            let (stmt, pos) = self.parse_statement(ctx)?; // parse_statement uses peek internally
+            let (stmt, pos) = self.parse_statement()?; // parse_statement uses peek internally
             body.children.push((stmt, pos));
         }
 
@@ -406,7 +401,6 @@ impl Parser {
 
     fn parse_fn_call(
         &mut self,
-        ctx: &mut SemanticContext,
         function_id: (String, Position),
     ) -> Result<(Expr, Position), ParserError> {
         // Consume the left parenthesis. We already know the next token is LPar.
@@ -433,7 +427,7 @@ impl Parser {
         // Otherwise, loop to parse arguments.
         loop {
             // Parse an expression argument.
-            let (arg, pos) = self.parse_expression(ctx)?;
+            let (arg, pos) = self.parse_expression()?;
             arguments.push((arg, pos.clone()));
 
             // Peek at the next token to decide what to do.
@@ -472,15 +466,15 @@ impl Parser {
     // --- Expression Parsing Functions ---
 
     /// Parses an expression, handling addition and subtraction.
-    fn parse_expression(&mut self, ctx: &mut SemanticContext) -> Result<(Expr, Position), ParserError> {
-        let (mut expr, pos) = self.parse_term(ctx)?;
+    fn parse_expression(&mut self) -> Result<(Expr, Position), ParserError> {
+        let (mut expr, pos) = self.parse_term()?;
         while let Some((token, _)) = self.peek() {
             match token {
                 Token::Plus | Token::Minus => {
                     // Consume the operator.
                     let (op_token, _) = self.consume()?;
                     // Parse the right-hand side.
-                    let (right, right_pos) = self.parse_term(ctx)?;
+                    let (right, right_pos) = self.parse_term()?;
                     let op = match op_token {
                         Token::Plus => Operator::Plus,
                         Token::Minus => Operator::Minus,
@@ -499,13 +493,13 @@ impl Parser {
     }
 
     /// Parses a term, handling multiplication, division, and modulus.
-    fn parse_term(&mut self, ctx: &mut SemanticContext) -> Result<(Expr, Position), ParserError> {
-        let (mut expr, expr_pos) = self.parse_factor(ctx)?;
+    fn parse_term(&mut self) -> Result<(Expr, Position), ParserError> {
+        let (mut expr, expr_pos) = self.parse_factor()?;
         while let Some((token, _)) = self.peek() {
             match token {
                 Token::Asterisk | Token::Fslash | Token::Percent => {
                     let (op_token, _op_pos) = self.consume()?; // capture the operator (its position is available if needed)
-                    let (right, right_pos) = self.parse_factor(ctx)?;
+                    let (right, right_pos) = self.parse_factor()?;
                     let op = match op_token {
                         Token::Asterisk => Operator::Asterisk,
                         Token::Fslash => Operator::Fslash,
@@ -528,34 +522,25 @@ impl Parser {
     }    
 
     /// Parses a factor: a number, an identifier, or a parenthesized expression.
-    fn parse_factor(&mut self, ctx: &mut SemanticContext) -> Result<(Expr, Position), ParserError> {
+    fn parse_factor(&mut self) -> Result<(Expr, Position), ParserError> {
         let (token, pos) = self.consume()?;
         match token {
-            Token::NumberLiteral(num) => Ok((Expr::Number((num.parse::<i64>().unwrap(), pos.clone())), pos)),
+            Token::NumberLiteral(num) => Ok((Expr::Number((num, pos.clone())), pos)),
             Token::CharacterLiteral(ch) => Ok((Expr::Character((ch, pos.clone())), pos)),
             Token::StringLiteral(str) => Ok((Expr::String((str, pos.clone())), pos)),
             Token::Identifier(id) => {
                 // If a left paren follows, this is a function call.
                 if let Some((next_token, _)) = self.peek() {
                     if next_token == Token::LPar {
-                        return self.parse_fn_call(ctx, (id, pos));
+                        return self.parse_fn_call((id, pos));
                     }
                 }
                 // Otherwise, it's a variable reference.
 
-                dbg!(&ctx.symbol_table);
-
-                match ctx.lookup(&id) {
-                    Some(s) => {
-                        Ok((Expr::VariableCall{ id: (id, pos.clone()), resolved: (Some(s.clone())) }, pos))
-                    }
-                    None => {
-                        Ok((Expr::Identifier((id, pos.clone())), pos))
-                    }
-                }
+                Ok((Expr::VariableCall((id, pos.clone())), pos))
             }
             Token::LPar => {
-                let expr = self.parse_expression(ctx)?;
+                let expr = self.parse_expression()?;
                 match self.consume()? {
                     (Token::RPar, _) => Ok(expr),
                     (unexpected, pos) => Err(ParserError::UnexpectedToken {
@@ -573,11 +558,11 @@ impl Parser {
         }
     }
 
-    fn parse_statement(&mut self, ctx: &mut SemanticContext) -> Result<(Box<dyn Node>, Position), ParserError> {
+    fn parse_statement(&mut self) -> Result<(Box<dyn Node>, Position), ParserError> {
         // First, if the statement starts with 'ret', handle it.
         if let Some((Token::Ret, ret_pos)) = self.peek() {
             let (_, _) = self.consume()?; // Consume 'ret'
-            let (expr, expr_pos) = self.parse_expression(ctx)?;
+            let (expr, expr_pos) = self.parse_expression()?;
             let (next_token, next_pos) = self.consume()?;
             if next_token != Token::Semicolon {
                 return Err(ParserError::SyntaxError {
@@ -591,7 +576,11 @@ impl Parser {
 
         if let Some((Token::If, _)) = self.peek() {
             let (_, _) = self.consume()?; // Consume 'if'
-            // let (expr, pos) = self.parse_expression(ctx)?;
+
+            // Condition
+
+            let (stat, pos) = self.parse_statement()?; // Parse the condition (expression)
+            // let (expr, pos) = self.parse_expression()?;
             /*
             match expr {
                 Expr::Number(_) => todo!(),
@@ -613,19 +602,19 @@ impl Parser {
                 match second_token {
                     Token::Colon => {
                         // Call our declaration (or declaration-assignment) helper.
-                        return self.parse_explicit_decl(ctx);
+                        return self.parse_explicit_decl();
                     }
                     Token::Walrus => {
                         // You could add a dedicated helper for walrus declarations if desired.
-                        return self.parse_walrus_decl(ctx);
+                        return self.parse_walrus_decl();
                     }
                     Token::Equal => {
                         // If assignment appears without a preceding declaration, handle it.
-                        return self.parse_assignment(ctx);
+                        return self.parse_assignment();
                     }
                     _ => {
                         // Fall back to parsing an expression statement.
-                        let (expr, pos) = self.parse_expression(ctx)?;
+                        let (expr, pos) = self.parse_expression()?;
                         if let Some((Token::Semicolon, _)) = self.peek() {
                             self.consume()?; // consume semicolon.
                         }
@@ -637,7 +626,7 @@ impl Parser {
 
         // If starting token is a number or left parenthesis, treat it as an expression.
         if let Some((Token::NumberLiteral(_) | Token::LPar, _)) = self.peek() {
-            let (expr, pos) = self.parse_expression(ctx)?;
+            let (expr, pos) = self.parse_expression()?;
             if let Some((Token::Semicolon, _)) = self.peek() {
                 self.consume()?;
             }
@@ -654,8 +643,7 @@ impl Parser {
     }
 
     fn parse_assignment(
-        &mut self,
-        ctx: &mut SemanticContext,
+        &mut self
     ) -> Result<(Box<dyn Node>, Position), ParserError> {
         // Pattern: Identifier, Equal, Expression, Semicolon.
 
@@ -678,7 +666,7 @@ impl Parser {
         }
 
         // Parse the expression for the right-hand side.
-        let (expr, pos) = self.parse_expression(ctx)?;
+        let (expr, pos) = self.parse_expression()?;
 
         // Expect a terminating semicolon.
         let (semi, semi_pos) = self.consume()?;
@@ -695,8 +683,7 @@ impl Parser {
     }
 
     fn parse_explicit_decl(
-        &mut self,
-        ctx: &mut SemanticContext,
+        &mut self
     ) -> Result<(Box<dyn Node>, Position), ParserError> {
         // Consume the identifier.
         let (id_token, id_pos) = self.consume()?;
@@ -740,20 +727,13 @@ impl Parser {
             }
         };
 
-        match ctx.lookup(&id) {
-            Some(s) => {
-                return Err(ParserError::GenericError(String::from(format!("Id: `{}` is already defined as {:?} at line {} index {}", id, s.0, s.1.line, s.1.index))))
-            }
-            None => { ctx.add_symbol(&id, (Symbol::Variable(var_type.clone()), type_pos)) }
-        }
-
         // At this point, we've parsed "<id> : <type>"
         // Check if the next token is an assignment operator.
         if let Some((Token::Equal, _)) = self.peek() {
             // Consume the '=' token.
             self.consume()?;
             // Parse initializer expression.
-            let (initializer_expr, pos) = self.parse_expression(ctx)?;
+            let (initializer_expr, pos) = self.parse_expression()?;
             // Expect a semicolon.
             let (semi, semi_pos) = self.consume()?;
             if semi != Token::Semicolon {
@@ -767,7 +747,9 @@ impl Parser {
             let decl = VariableDeclaration {
                 id: id.clone(),
                 var_type: var_type.clone(),
+                position: id_pos.clone(),
             };
+        
             // ...and an assignment node with lhs being the variable name.
             let assign = Assignment {
                 lhs: id,
@@ -791,13 +773,13 @@ impl Parser {
             Ok((Box::new(VariableDeclaration {
                 id: id,
                 var_type,
-            }), semi_pos))
+                position: id_pos.clone(),
+            }), id_pos))
         }
     }
 
     fn parse_walrus_decl(
-        &mut self,
-        ctx: &mut SemanticContext,
+        &mut self
     ) -> Result<(Box<dyn Node>, Position), ParserError> {
         // Pattern: Identifier, Walrus, Expression, Semicolon.
         let (id_token, pos) = self.consume()?; // Identifier
@@ -817,7 +799,7 @@ impl Parser {
         }
 
         // Parse the initializer expression.
-        let (expr, expr_pos) = self.parse_expression(ctx)?;
+        let (expr, expr_pos) = self.parse_expression()?;
 
         // Expect semicolon.
         let (semi, semi_pos) = self.consume()?;
@@ -828,8 +810,6 @@ impl Parser {
                 position: semi_pos,
             });
         }
-
-        ctx.add_symbol(&id, (Symbol::Variable(Type::Custom(String::from("<inferred>"))), expr_pos.clone()));
 
         Ok((Box::new(WalrusDeclaration {
             id: id,

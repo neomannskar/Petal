@@ -4,7 +4,7 @@ use crate::front::nodes::node::Node;
 use crate::front::nodes::operator::Operator;
 use crate::front::semantic::{SemanticContext, Symbol};
 use crate::front::token::Position;
-use crate::middle::ir::{IRContext, IRInstruction};
+use crate::middle::ir::{IRContext, IRInstruction, IRUnit, flatten_units};
 
 use super::r#type::Type;
 
@@ -27,6 +27,7 @@ impl Node for BinaryExpr {
 
     fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
         // Analyze left and right operands.
+
         self.left.0.analyze(ctx)?;
         self.right.0.analyze(ctx)?;
 
@@ -43,56 +44,18 @@ impl Node for BinaryExpr {
         Ok(())
     }
 
-    fn ir(&self, ctx: &mut IRContext) -> Vec<IRInstruction> {
-        let mut instructions = Vec::new();
-
-        // Generate IR for the left operand
-        let left_ir = self.left.0.ir(ctx);
-        instructions.extend(left_ir); // Add left operand's instructions
-
-        // Generate IR for the right operand
-        let right_ir = self.right.0.ir(ctx);
-        instructions.extend(right_ir); // Add right operand's instructions
-
-        // Allocate a temporary register for the result of this binary operation
-        let dest = ctx.allocate_temp();
-
-        // Emit an instruction for the binary operation
-        let op_instruction = match self.op {
-            Operator::Plus => IRInstruction::Add {
-                dest: dest.clone(),
-                lhs: ctx.get_last_temp(), // Use the last allocated temp for the left operand
-                rhs: ctx.get_second_last_temp(), // Use the second-to-last allocated temp for the right operand
-            },
-            Operator::Minus => IRInstruction::Sub {
-                dest: dest.clone(),
-                lhs: ctx.get_last_temp(),
-                rhs: ctx.get_second_last_temp(),
-            },
-            // Extend to support more operators (e.g., Multiply, Divide, etc.)
-            _ => panic!("Unsupported operator in BinaryExpr."),
-        };
-
-        instructions.push(op_instruction);
-
-        // IMPORTANT!
-        // ctx.add_dest(dest);
-
-        instructions
+    fn ir(&self, _ctx: &mut IRContext) -> Vec<IRUnit> {
+        Vec::new()
     }
 }
 
 #[derive(Debug, Clone)]
 pub enum Expr {
-    Number((i64, Position)),
-    Character((char, Position)),
+    Number((String, Position)),
+    Character((String, Position)),
     String((String, Position)),
     Binary((Box<BinaryExpr>, Position)),
-    Identifier((String, Position)),
-    VariableCall {
-        id: (String, Position),
-        resolved: Option<(Symbol, Position)>,
-    },
+    VariableCall((String, Position)),
     FunctionCall {
         function: (String, Position),
         arguments: Vec<(Expr, Position)>,
@@ -119,7 +82,8 @@ impl Expr {
                 // its type is that of its left side.
                 bin.left.0.get_type(ctx)
             }
-            Expr::Identifier((id, _)) => {
+            Expr::VariableCall((id, pos)) => {
+                // dbg!(&ctx);
                 if let Some((symbol, _)) = ctx.lookup(id) {
                     match symbol {
                         Symbol::Variable(t) => t.clone(),
@@ -128,18 +92,7 @@ impl Expr {
                         // If you have other categories, you could add them here.
                     }
                 } else {
-                    panic!("Undefined identifier: {}", id);
-                }
-            }
-            Expr::VariableCall { id, resolved: _ } => {
-                if let Some((symbol, _)) = ctx.lookup(&id.0) {
-                    if let Symbol::Variable(var_type) = symbol {
-                        var_type.clone()
-                    } else {
-                        panic!("Identifier `{}` is not a variable", id.0);
-                    }
-                } else {
-                    panic!("Failed to locate the variable `{}`", id.0);
+                    panic!("Undefined identifier: {} on line {} at index {}", id, pos.line, pos.index);
                 }
             }
             Expr::FunctionCall { function, arguments: _ } => {
@@ -164,7 +117,7 @@ impl Expr {
             Expr::Character(_) => Ok(Type::basic("char")),
             Expr::String(_) => Ok(Type::basic("str")),
             Expr::Binary((bin_expr, _)) => bin_expr.left.0.infer_type(ctx),
-            Expr::Identifier((id, _)) => {
+            Expr::VariableCall((id, _)) => {
                 if let Some((symbol, _)) = ctx.lookup(id) {
                     match symbol {
                         Symbol::Variable(t) => Ok(t.clone()),
@@ -173,17 +126,6 @@ impl Expr {
                     }
                 } else {
                     Err(format!("Undefined identifier: {}", id))
-                }
-            }
-            Expr::VariableCall { id, resolved: _ } => {
-                if let Some((symbol, _)) = ctx.lookup(&id.0) {
-                    if let Symbol::Variable(var_type) = symbol {
-                        Ok(var_type.clone())
-                    } else {
-                        Err(format!("Identifier '{}' is not a function", id.0))
-                    }
-                } else {
-                    Err(format!("Failed to locate function '{}'", id.0))
                 }
             }
             Expr::FunctionCall { function, arguments: _ } => {
@@ -199,6 +141,154 @@ impl Expr {
             }
         }
     }
+
+    /// Flatten the expression into TAC. Returns a temporary and a vector of IR instructions.
+    pub fn tac(&self, ctx: &mut IRContext) -> (String, Vec<IRInstruction>) {
+        match self {
+            // Number literal: parse the string into an i64 and emit a LoadConstant.
+            Expr::Number((n, _pos)) => {
+                let tmp = ctx.allocate_temp();
+                let num_value = n
+                    .parse::<i64>()
+                    .expect("Failed to parse number literal into i64");
+                (
+                    tmp.clone(),
+                    vec![IRInstruction::LoadConstant {
+                        dest: tmp,
+                        value: num_value,
+                    }],
+                )
+            }
+            // Binary expression: get TAC for both sides, then emit an instruction based on the operator.
+            Expr::Binary((boxed_bin_expr, _pos)) => {
+                // Destructure the boxed BinaryExpr.
+                let BinaryExpr { left, op, right } = &**boxed_bin_expr;
+                let (t_left, mut inst_left) = left.0.tac(ctx);
+                let (t_right, mut inst_right) = right.0.tac(ctx);
+                let tmp = ctx.allocate_temp();
+                let op_inst = match op {
+                    Operator::Asterisk => IRInstruction::Mul {
+                        dest: tmp.clone(),
+                        op1: t_left,
+                        op2: t_right,
+                    },
+                    Operator::Fslash => IRInstruction::Div {
+                        dest: tmp.clone(),
+                        op1: t_left,
+                        op2: t_right,
+                    },
+                    Operator::Percent => IRInstruction::Mod {
+                        dest: tmp.clone(),
+                        op1: t_left,
+                        op2: t_right,
+                    },
+                    Operator::Plus => IRInstruction::Add {
+                        dest: tmp.clone(),
+                        op1: t_left,
+                        op2: t_right,
+                    },
+                    Operator::Minus => IRInstruction::Sub {
+                        dest: tmp.clone(),
+                        op1: t_left,
+                        op2: t_right,
+                    },
+                    Operator::And => IRInstruction::And {
+                        dest: tmp.clone(),
+                        op1: t_left,
+                        op2: t_right,
+                    },
+                    Operator::Or => IRInstruction::Or {
+                        dest: tmp.clone(),
+                        op1: t_left,
+                        op2: t_right,
+                    },
+                    Operator::Xor => IRInstruction::Xor {
+                        dest: tmp.clone(),
+                        op1: t_left,
+                        op2: t_right,
+                    },
+                    Operator::ShiftLeft => IRInstruction::ShiftLeft {
+                        dest: tmp.clone(),
+                        op1: t_left,
+                        op2: t_right,
+                    },
+                    Operator::ShiftRight => IRInstruction::ShiftRight {
+                        dest: tmp.clone(),
+                        op1: t_left,
+                        op2: t_right,
+                    },
+                    // For other operators, you can add more cases or leave them unimplemented.
+                    Operator::Walrus 
+                    | Operator::Asign 
+                    | Operator::Equals 
+                    | Operator::NotEquals 
+                    | Operator::Compare 
+                    | Operator::Not => unimplemented!("Operator not implemented in TAC"),
+                };
+                let mut instructions = Vec::new();
+                instructions.append(&mut inst_left);
+                instructions.append(&mut inst_right);
+                instructions.push(op_inst);
+                (tmp, instructions)
+            }
+            // Character literal: take the first character and convert it to its Unicode (i64) code.
+            Expr::Character((ch, _pos)) => {
+                let tmp = ctx.allocate_temp();
+                let code = ch
+                    .chars()
+                    .next()
+                    .expect("Character literal is empty") as i64;
+                (
+                    tmp.clone(),
+                    vec![IRInstruction::LoadConstant {
+                        dest: tmp,
+                        value: code,
+                    }],
+                )
+            }
+            // String literal: for now, mark as unimplemented (you might wish to add a LoadString variant later).
+            Expr::String((_s, _pos)) => {
+                todo!("TAC for string literals is not yet implemented")
+            }
+            // Variable call: load the variable's value (assumed to be accessible by its name).
+            Expr::VariableCall((var_name, _pos)) => {
+                let tmp = ctx.allocate_temp();
+                // Look up the variable's allocated offset from IRContext.
+                let mem_operand = if let Some(offset) = ctx.stack_allocations.get(var_name) {
+                    // Build a memory operand using the offset.
+                    format!("{}(%rbp)", offset)
+                } else {
+                    // Fall back to the variable name (shouldn't happen if analysis is complete).
+                    var_name.clone()
+                };
+                (
+                    tmp.clone(),
+                    vec![IRInstruction::Load {
+                        dest: tmp,
+                        src: mem_operand,
+                    }],
+                )
+            }            
+            // Function call: generate TAC for each argument and then call the function.
+            Expr::FunctionCall { function, arguments } => {
+                let mut instructions = Vec::new();
+                let mut arg_temps = Vec::new();
+                for arg in arguments {
+                    let (temp, arg_instrs) = arg.0.tac(ctx);
+                    instructions.extend(arg_instrs);
+                    arg_temps.push(temp);
+                }
+                let tmp = ctx.allocate_temp();
+                instructions.push(IRInstruction::Call {
+                    dest: tmp.clone(),
+                    fn_id: function.0.clone(),
+                    args: arg_temps,
+                });
+                (tmp, instructions)
+            }
+            _ => unimplemented!("TAC for this kind of expression is not implemented"),
+        }
+    }        
 }
 
 impl Node for Expr {
@@ -230,22 +320,12 @@ impl Node for Expr {
                 print!("{}{} |", pos, " ".repeat(10 - pos.len()));
                 binary_expr.right.0.display(indentation + 4);
             }
-            Expr::Identifier((id, _)) => {
+            Expr::VariableCall((id, _)) => {
                 println!(
                     "{:>width$}└───[ {}: `{}`",
                     "",
                     "Id".magenta(),
                     id,
-                    width = indentation
-                );
-            }
-            Expr::VariableCall { id, resolved } => {
-                println!(
-                    "{:>width$}└───[ {}: `{}` : {:?}",
-                    "",
-                    "VarCall".red(),
-                    id.0,
-                    resolved,
                     width = indentation
                 );
             }
@@ -286,7 +366,7 @@ impl Node for Expr {
                 // Delegate to BinaryExpr's analysis.
                 bin_expr.analyze(ctx)
             }
-            Expr::Identifier((id, _)) => {
+            Expr::VariableCall((id, _)) => {
                 // Analyze the identifier node (ensures it's defined).
 
                 match ctx.lookup(id) {
@@ -295,20 +375,6 @@ impl Node for Expr {
                         println!("{:?}", id);
                         Err(String::from("Identifier not found in hashmap?!"))
                     }
-                }
-            }
-            Expr::VariableCall { id, resolved: _ } => {
-                if let Some((symbol, _)) = ctx.lookup(&id.0) {
-                    if let Symbol::Variable(_var_type) = symbol {
-                        // Optionally, you could even update the node with the resolved symbol,
-                        // so later phases have immediate access to things like memory offsets.
-                        // resolved = Some(symbol.clone());
-                        Ok(())
-                    } else {
-                        Err(format!("Identifier '{}' is not a variable", id.0))
-                    }
-                } else {
-                    Err(format!("Undefined variable: {}", id.0))
                 }
             }
             Expr::FunctionCall {
@@ -324,42 +390,126 @@ impl Node for Expr {
         }
     }
 
-    fn ir(&self, ctx: &mut IRContext) -> Vec<IRInstruction> {
+    /// Generate IR for the expression, returning a vector of IRUnit.
+    fn ir(&self, ctx: &mut IRContext) -> Vec<IRUnit> {
         match self {
-            Expr::Number((value, _)) => {
-                // Load the constant into a new temporary register
+            // For a number literal, allocate a temporary and load a constant.
+            Expr::Number((n, _pos)) => {
+                let tmp = ctx.allocate_temp();
+                let value = n
+                    .parse::<i64>()
+                    .expect("Failed to parse number literal into i64");
+                vec![IRUnit::Global(vec![IRInstruction::LoadConstant {
+                    dest: tmp,
+                    value,
+                }])]
+            }
+            // For characters and strings, you'll implement as needed.
+            Expr::Character(_) => todo!("IR for character not implemented"),
+            Expr::String(_) => todo!("IR for string not implemented"),
+            // For a binary expression, use tac on both operands, then combine.
+            Expr::Binary((boxed_bin_expr, _pos)) => {
+                // Destructure the boxed BinaryExpr.
+                let BinaryExpr { left, op, right } = &**boxed_bin_expr;
+                // Use our tac helper to generate TAC for both operands.
+                let (left_temp, left_instrs) = left.0.tac(ctx);
+                let (right_temp, right_instrs) = right.0.tac(ctx);
+                // Allocate a new temporary for the result.
                 let dest = ctx.allocate_temp();
-                vec![IRInstruction::Load {
-                    dest: dest.clone(),
-                    src: value.to_string(),
-                }]
+                // Build the appropriate arithmetic or logical IR instruction.
+                let bin_inst = match op {
+                    Operator::Plus => IRInstruction::Add {
+                        dest: dest.clone(),
+                        op1: left_temp,
+                        op2: right_temp,
+                    },
+                    Operator::Minus => IRInstruction::Sub {
+                        dest: dest.clone(),
+                        op1: left_temp,
+                        op2: right_temp,
+                    },
+                    Operator::Asterisk => IRInstruction::Mul {
+                        dest: dest.clone(),
+                        op1: left_temp,
+                        op2: right_temp,
+                    },
+                    Operator::Fslash => IRInstruction::Div {
+                        dest: dest.clone(),
+                        op1: left_temp,
+                        op2: right_temp,
+                    },
+                    Operator::Percent => IRInstruction::Mod {
+                        dest: dest.clone(),
+                        op1: left_temp,
+                        op2: right_temp,
+                    },
+                    Operator::And => IRInstruction::And {
+                        dest: dest.clone(),
+                        op1: left_temp,
+                        op2: right_temp,
+                    },
+                    Operator::Or => IRInstruction::Or {
+                        dest: dest.clone(),
+                        op1: left_temp,
+                        op2: right_temp,
+                    },
+                    Operator::Xor => IRInstruction::Xor {
+                        dest: dest.clone(),
+                        op1: left_temp,
+                        op2: right_temp,
+                    },
+                    Operator::ShiftLeft => IRInstruction::ShiftLeft {
+                        dest: dest.clone(),
+                        op1: left_temp,
+                        op2: right_temp,
+                    },
+                    Operator::ShiftRight => IRInstruction::ShiftRight {
+                        dest: dest.clone(),
+                        op1: left_temp,
+                        op2: right_temp,
+                    },
+                    // For operators you haven't implemented yet:
+                    Operator::Walrus 
+                    | Operator::Asign 
+                    | Operator::Equals 
+                    | Operator::NotEquals 
+                    | Operator::Compare 
+                    | Operator::Not => todo!("Operator {:?} not implemented in IR", op),
+                };
+                // Combine the instructions: first compute the left operand, then the right,
+                // and finally perform the binary operation.
+                let mut instructions = Vec::new();
+                instructions.extend(left_instrs);
+                instructions.extend(right_instrs);
+                instructions.push(bin_inst);
+                vec![IRUnit::Global(instructions)]
             }
-            Expr::Binary((binary_expr, _)) => {
-                // Delegate to the BinaryExpr's ir() method
-                binary_expr.ir(ctx)
-            }
-            Expr::Identifier((id, _)) => {
-                // Reference an identifier
+            // A variable call loads the variable's value (assumed to be stored at a known location).
+            Expr::VariableCall((var_name, _pos)) => {
                 let dest = ctx.allocate_temp();
-                vec![IRInstruction::Load {
-                    dest: dest.clone(),
-                    src: id.clone(),
-                }]
+                vec![IRUnit::Global(vec![IRInstruction::Load {
+                    dest,
+                    src: var_name.clone(),
+                }])]
             }
-            Expr::VariableCall { id, resolved } => {
-                // Here you would generate the proper IR load instruction.
-                // If `resolved` is set, you can retrieve extra info (e.g. memory location).
-                let _symbol = resolved.as_ref().expect("Symbol should be resolved by now");
-                // For example:
-                vec![IRInstruction::LoadVariable {
-                    dest: ctx.allocate_temp(),
-                    variable: id.0.clone(),
-                    // possibly more fields based on 'symbol'
-                }]
-            },
-            // Expr::FunctionCall { function, arguments }
-            _ => {
-                todo!("[_] Expr .get_type()")
+            // For a function call, generate IR for each argument, collect their result temporaries,
+            // and emit a call instruction.
+            Expr::FunctionCall { function, arguments } => {
+                let mut arg_temps: Vec<String> = Vec::new();
+                let mut instructions = Vec::new();
+                for arg in arguments {
+                    // Here we use tac so we get a temporary register for each argument.
+                    let (temp, arg_instrs) = arg.0.tac(ctx);
+                    instructions.extend(arg_instrs);
+                    arg_temps.push(temp);
+                }
+                let dest = ctx.allocate_temp();
+                instructions.push(IRInstruction::Call {
+                    dest,
+                    fn_id: function.0.clone(),
+                    args: arg_temps,
+                });
+                vec![IRUnit::Global(instructions)]
             }
         }
     }
@@ -379,21 +529,12 @@ impl Node for ExpressionStatement {
             Expr::Character((ch, _)) => println!("{:>width$}-> Character('{}')", "", ch, width = indentation + 4),
             Expr::String((str, _)) => println!("{:>width$}-> String(\"{}\")", "", str, width = indentation + 4),
             Expr::Binary((bin, _)) => bin.display(indentation + 4),
-            Expr::Identifier((id, _)) => println!(
+            Expr::VariableCall((id, _)) => println!(
                 "{:>width$}-> Identifier({})",
                 "",
                 id,
                 width = indentation + 4
             ),
-            Expr::VariableCall { id, resolved } => {
-                println!(
-                    "{:>width$}└───[ VarCall: `{}` : {:?}",
-                    "",
-                    id.0,
-                    resolved,
-                    width = indentation + 4
-                );
-            }
             Expr::FunctionCall {
                 function,
                 arguments,
@@ -418,7 +559,7 @@ impl Node for ExpressionStatement {
         self.expression.analyze(ctx)
     }
 
-    fn ir(&self, ctx: &mut IRContext) -> Vec<IRInstruction> {
-        self.expression.ir(ctx)
+    fn ir(&self, _ctx: &mut IRContext) -> Vec<IRUnit> {
+        Vec::new()
     }
 }
