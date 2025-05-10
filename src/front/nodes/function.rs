@@ -5,13 +5,15 @@ use crate::front::semantic::{SemanticContext, Symbol};
 use crate::front::token::Position;
 use crate::middle::ir::{IRContext, IRFunction, IRInstruction, IRType, IRUnit};
 
+use super::body::Body;
 use super::expr::Expr;
+use super::parameter::Parameter;
 use super::r#type::{FunctionType, Type};
 
 pub struct FunctionDefinition {
     pub id: (String, Position),
-    pub parameters: Vec<(FunctionParameter, Position)>,
-    pub body: (Box<FunctionBody>, Position),
+    pub parameters: Vec<(Parameter, Position)>,
+    pub body: (Box<Body>, Position),
     pub return_type: (FunctionReturnType, Position),
 }
 
@@ -34,7 +36,7 @@ impl Node for FunctionDefinition {
         let ret_pos = format!("{}:{}", self.return_type.1.line, self.return_type.1.index);
         print!("{}{} |", ret_pos, " ".repeat(10 - ret_pos.len()));
         self.return_type.0.display(indentation + 4);
-        
+
         let body_pos = format!("{}:{}", self.body.1.line, self.body.1.index);
         print!("{}{} |", body_pos, " ".repeat(10 - body_pos.len()));
         self.body.0.display(indentation + 4);
@@ -52,21 +54,21 @@ impl Node for FunctionDefinition {
             (
                 Symbol::Function(FunctionType {
                     // Refactor in future
-                    parameters: self.parameters
+                    parameters: self
+                        .parameters
                         .iter()
                         .map(|(param, _param_pos)| param.var_type.clone())
                         .collect(),
-                    return_type: Box::new(self.return_type.0.0.clone()),
+                    return_type: Box::new(self.return_type.0 .0.clone()),
                 }),
                 self.id.1.clone(), // Use the position of the function's identifier
             ),
         );
-        
 
         // Enter a new scope for the function body.
         ctx.enter_scope();
         // Set the expected return type.
-        ctx.current_function_return = Some(self.return_type.0.0.clone());
+        ctx.current_function_return = Some(self.return_type.0 .0.clone());
 
         // First, analyze each parameter.
         for (param, _) in &self.parameters {
@@ -85,26 +87,26 @@ impl Node for FunctionDefinition {
 
     fn ir(&self, ctx: &mut IRContext) -> Vec<IRUnit> {
         let mut instructions: Vec<IRInstruction> = Vec::new();
-    
+
         // Process each parameter.
         for (i, (param, _)) in self.parameters.iter().enumerate() {
             let param_type = IRType::from_type(&param.var_type);
             // Allocate the parameter variable on the stack.
             ctx.allocate_variable(&param.id, &param_type);
-    
+
             // Use the target to get the proper argument register.
             let arg_reg = ctx.target.arg_registers(i);
-    
+
             let offset = ctx.stack_allocations.get(&param.id).unwrap();
             let offset_str = format!("{}(%rbp)", offset);
-    
+
             // Emit a Store instruction to move the argument (in a register) to its stack slot.
             instructions.push(IRInstruction::Store {
                 dest: offset_str,
                 src: arg_reg,
             });
         }
-    
+
         // Generate IR for the function body and flatten it.
         let body_units = self.body.0.ir(ctx);
         for unit in body_units {
@@ -115,89 +117,12 @@ impl Node for FunctionDefinition {
                 }
             }
         }
-    
+
         // Wrap the final instruction list into an IRFunction unit.
         vec![IRUnit::Function(IRFunction {
             id: self.id.0.clone(),
             instructions,
         })]
-    }   
-}
-
-pub struct FunctionParameter {
-    pub id: String,
-    pub var_type: Type,
-    pub position: Position,
-}
-
-impl Node for FunctionParameter {
-    fn display(&self, indentation: usize) {
-        println!(
-            "{:>width$}└───[ {}: `{}` : {:?}",
-            "",
-            "FnParam".blue(),
-            self.id,
-            self.var_type,
-            width = indentation
-        );
-    }
-
-    fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
-        if ctx.lookup(&self.id).is_some() {
-            return Err(format!("Parameter `{}` is already declared.", self.id));
-        }
-        // Insert the parameter into the symbol table.
-        ctx.add_symbol(&self.id, (Symbol::Variable(self.var_type.clone()), self.position.clone()));
-        Ok(())
-    }
-
-    fn ir(&self, _ctx: &mut IRContext) -> Vec<IRUnit> {
-        // Instead of a DeclareVariable instruction, we allocate stack space for the parameter.
-        let inst = IRInstruction::AllocStack {
-            name: self.id.clone(),
-            var_type: IRType::from_type(&self.var_type),
-            // Parameters usually don't come with an initializer because their
-            // value is moved from the argument register during the function prologue.
-            initial_value: None,
-        };
-
-        vec![IRUnit::Global(vec![inst])]
-    }
-}
-
-pub struct FunctionBody {
-    pub children: Vec<(Box<dyn Node>, Position)>,
-}
-
-impl Node for FunctionBody {
-    fn display(&self, indentation: usize) {
-        println!("{:>width$}└───[ {}", "", "FnBody".blue(), width = indentation);
-        for (child, pos) in &self.children {
-            let pos = format!("{}:{}", pos.line, pos.index);
-            print!("{}{} |", pos, " ".repeat(10 - pos.len()));
-            child.display(indentation + 4);
-        }
-    }
-
-    fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
-        ctx.enter_scope();
-        for (stmt, _) in &self.children {
-            stmt.analyze(ctx)?;
-        }
-        ctx.exit_scope();
-        Ok(())
-    }
-
-    fn ir(&self, ctx: &mut IRContext) -> Vec<IRUnit> {
-        let mut body_units = Vec::new();
-    
-        for (child, _) in &self.children {
-            let units = child.ir(ctx);
-            // dbg!(&units);
-            body_units.extend(units);
-        }
-    
-        body_units
     }
 }
 
@@ -232,7 +157,12 @@ pub struct Return {
 
 impl Node for Return {
     fn display(&self, indentation: usize) {
-        println!("{:>width$}└───[ {}:", "", "Return".red(), width = indentation);
+        println!(
+            "{:>width$}└───[ {}:",
+            "",
+            "Return".red(),
+            width = indentation
+        );
         let pos = format!("{}:{}", self.value.1.line, self.value.1.index);
         print!("{}{} |", pos, " ".repeat(10 - pos.len()));
         self.value.0.display(indentation + 4);
@@ -265,12 +195,10 @@ impl Node for Return {
         // Flatten the expression: generate TAC for computing the return value.
         // We assume `tac` returns (temporary, IR instructions) for the expression.
         let (temp, mut expr_insts) = self.value.0.tac(ctx);
-        
+
         // Append a Return instruction that uses the temporary holding the return value.
-        expr_insts.push(IRInstruction::Return {
-            value: temp,
-        });
-        
+        expr_insts.push(IRInstruction::Return { value: temp });
+
         // Wrap the sequence of instructions in an IRUnit.
         vec![IRUnit::Global(expr_insts)]
     }

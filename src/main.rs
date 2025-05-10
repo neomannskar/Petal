@@ -25,7 +25,7 @@ macro_rules! _here {
 }
 
 use crate::middle::ir::IRModule;
-use crate::middle::spill::perform_spill_pass;  // adjust the module path appropriately
+use crate::middle::spill::perform_spill_pass; // adjust the module path appropriately
 
 fn run_spill_pass_on_module(ir_module: &mut IRModule, available_regs: Vec<String>) {
     // For each function in the module, run the spill pass on its instructions.
@@ -35,7 +35,10 @@ fn run_spill_pass_on_module(ir_module: &mut IRModule, available_regs: Vec<String
         let (new_insts, alloc_map) = perform_spill_pass(func.instructions.clone(), &mut regs);
         func.instructions = new_insts;
         // Optionally: log alloc_map information.
-        println!("Register allocation for function {}: {:?}", func.id, alloc_map);
+        println!(
+            "Register allocation for function {}: {:?}",
+            func.id, alloc_map
+        );
     }
 }
 
@@ -76,18 +79,18 @@ fn main() {
             let analyzer = SemanticAnalyzer::new(ast);
 
             match analyzer.analyze() {
-                Ok(analyzed_ast) => {
+                Ok(_analyzed_ast) => {
                     println!("Semantic analysis successful!\n");
-                    
-                    /*
-                    let mut code_generator = Generator::new(ir, ir_ctx.target);
 
+                    // let mut _code_generator = Generator::new(ir, ir_ctx.target);
+
+                    /*
                     let asm = code_generator.generate();
 
                     let mut s = config.src.clone().to_string_lossy().into_owned();
                     s.push_str(".s");
                     let mut output_file = File::create(s).unwrap();
-                    
+
                     output_file.write_all(asm.as_bytes()).unwrap();
                     */
                 }

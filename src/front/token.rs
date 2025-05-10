@@ -5,6 +5,8 @@ pub enum Token {
 
     Identifier(String),
 
+    Let,
+
     Fn,
     Ret,
     Struct,
@@ -16,11 +18,16 @@ pub enum Token {
     Else,
     For,
     While,
+    Loop,
+    Break,
+    Continue,
+    As,
 
+    BooleanLiteral(String),
     NumberLiteral(String), // Stores both integers and floats as strings
     CharacterLiteral(String),
     StringLiteral(String),
-
+    
     Plus,
     Minus,
     Asterisk,
@@ -28,22 +35,23 @@ pub enum Token {
     Percent,
     Ampersand,
     Pipe,
-
+    
     And,
     Or,
     Not,
     Compare,
-
+    
     Equal,
     Walrus,
-
+    
     LPar,
     RPar,
     LCurl,
     RCurl,
-
+    
     Arrow,
-
+    
+    Bool,
     I32,
     I64,
     U32,

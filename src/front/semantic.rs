@@ -1,6 +1,10 @@
 use std::collections::{HashMap, HashSet};
 
-use super::{ast::Ast, nodes::r#type::{FunctionType, StructType, Type}, token::Position};
+use super::{
+    ast::Ast,
+    nodes::r#type::{FunctionType, StructType, Type},
+    token::Position,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Symbol {
@@ -59,7 +63,10 @@ pub struct SemanticAnalyzer {
 
 impl SemanticAnalyzer {
     pub fn new(ast: Box<Ast>) -> SemanticAnalyzer {
-        SemanticAnalyzer { ast, ctx: SemanticContext::new() }
+        SemanticAnalyzer {
+            ast,
+            ctx: SemanticContext::new(),
+        }
     }
 
     pub fn analyze(mut self) -> Result<Box<Ast>, String> {

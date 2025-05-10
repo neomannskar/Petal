@@ -1,8 +1,8 @@
 use std::iter::Peekable;
 use std::str::Chars;
 
-use crate::front::token::Token;
 use super::token::Position;
+use crate::front::token::Token;
 
 macro_rules! here {
     () => {
@@ -293,6 +293,7 @@ impl<'a> Lexer<'a> {
         }
 
         match ident.as_str() {
+            "let" => Token::Let,
             "fn" => Token::Fn,
             "ret" => Token::Ret,
             "struct" => Token::Struct,
@@ -303,6 +304,10 @@ impl<'a> Lexer<'a> {
             "else" => Token::Else,
             "for" => Token::For,
             "while" => Token::While,
+            "loop" => Token::Loop,
+            "break" => Token::Break,
+            "continue" => Token::Continue,
+            "as" => Token::As,
             "i32" => Token::I32,
             "i64" => Token::I64,
             "u32" => Token::U32,
@@ -311,6 +316,9 @@ impl<'a> Lexer<'a> {
             "f32" => Token::F32,
             "f64" => Token::F64,
             "char" => Token::Char,
+            "bool" => Token::Bool,
+            "true" => Token::BooleanLiteral("true".to_string()),
+            "false" => Token::BooleanLiteral("false".to_string()),
             _ => Token::Identifier(ident),
         }
     }
@@ -320,7 +328,7 @@ impl<'a> Lexer<'a> {
         // Consume the opening double-quote.
         self.input.next();
         self.update_position('\"');
-        
+
         while let Some(&ch) = self.input.peek() {
             if ch == '"' {
                 self.input.next(); // Consume the closing quote.
@@ -393,7 +401,13 @@ impl<'a> Lexer<'a> {
 
     pub fn lex(self) -> Vec<(Token, Position)> {
         let mut vec: Vec<(Token, Position)> = self.collect();
-        vec.push((Token::Eof, Position { line: vec.last().unwrap().1.line + 1, index: 1 }));
+        vec.push((
+            Token::Eof,
+            Position {
+                line: vec.last().unwrap().1.line + 1,
+                index: 1,
+            },
+        ));
         vec
     }
 }

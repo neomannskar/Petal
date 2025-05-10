@@ -1,4 +1,7 @@
-use crate::{back::target::Target, front::nodes::r#type::{PrimitiveType, Type}};
+use crate::{
+    back::target::Target,
+    front::nodes::r#type::{PrimitiveType, Type},
+};
 
 use std::collections::HashMap;
 
@@ -17,8 +20,8 @@ pub struct IRContext {
 
 impl IRContext {
     pub fn new(target: Target) -> Self {
-        IRContext { 
-            temp_count: 0, 
+        IRContext {
+            temp_count: 0,
             label_count: 0,
             symbol_table: HashMap::new(),
             stack_allocations: HashMap::new(),
@@ -43,7 +46,7 @@ impl IRContext {
     /// for a variable based on its type size.
     pub fn allocate_variable(&mut self, name: &str, var_type: &IRType) -> i32 {
         let size = var_type.size(); // e.g., IRType::Int(4) returns 4.
-        // Update the running stack offset (note: the offset becomes more negative)
+                                    // Update the running stack offset (note: the offset becomes more negative)
         self.current_stack_offset -= size;
         let offset = self.current_stack_offset;
         self.stack_allocations.insert(name.to_owned(), offset);
@@ -85,11 +88,11 @@ impl IRType {
                     PrimitiveType::Bool => IRType::Bool(1),
                     _ => panic!("Unknown type: {:?}", t),
                 }
-            },
+            }
             _ => {
                 todo!("Unknown type, implement compound types handling")
                 // panic!("Unknown type: {:?}", r#type)
-            },
+            }
         }
     }
 
@@ -109,34 +112,93 @@ impl IRType {
 #[derive(Debug, Clone)]
 pub enum IRInstruction {
     // Arithmetic in TAC style:
-    Add { dest: String, op1: String, op2: String },
-    Sub { dest: String, op1: String, op2: String },
-    Mul { dest: String, op1: String, op2: String },
-    Div { dest: String, op1: String, op2: String },
-    Mod { dest: String, op1: String, op2: String },
-    
+    Add {
+        dest: String,
+        op1: String,
+        op2: String,
+    },
+    Sub {
+        dest: String,
+        op1: String,
+        op2: String,
+    },
+    Mul {
+        dest: String,
+        op1: String,
+        op2: String,
+    },
+    Div {
+        dest: String,
+        op1: String,
+        op2: String,
+    },
+    Mod {
+        dest: String,
+        op1: String,
+        op2: String,
+    },
+
     // Boolean/logical/bitwise operations:
-    And { dest: String, op1: String, op2: String },
-    Or  { dest: String, op1: String, op2: String },
-    Xor { dest: String, op1: String, op2: String },
-    
+    And {
+        dest: String,
+        op1: String,
+        op2: String,
+    },
+    Or {
+        dest: String,
+        op1: String,
+        op2: String,
+    },
+    Xor {
+        dest: String,
+        op1: String,
+        op2: String,
+    },
+
     // Shift operations:
-    ShiftLeft  { dest: String, op1: String, op2: String },
-    ShiftRight { dest: String, op1: String, op2: String },
-    
+    ShiftLeft {
+        dest: String,
+        op1: String,
+        op2: String,
+    },
+    ShiftRight {
+        dest: String,
+        op1: String,
+        op2: String,
+    },
+
     // Unary operator:
-    Not { dest: String, src: String },
+    Not {
+        dest: String,
+        src: String,
+    },
 
     // Memory operations for load/store:
-    Load  { dest: String, src: String },
-    Store { dest: String, src: String },
+    Load {
+        dest: String,
+        src: String,
+    },
+    Store {
+        dest: String,
+        src: String,
+    },
 
     // A function call returns its value in a “dest” temporary.
-    Call { dest: String, fn_id: String, args: Vec<String> },
+    Call {
+        dest: String,
+        fn_id: String,
+        args: Vec<String>,
+    },
 
     // Branch instructions, typically comparing temporaries.
-    Branch { condition: String, true_label: String, false_label: String },
-    Return { value: String },
+    Branch {
+        condition: String,
+        true_label: String,
+        false_label: String,
+    },
+    Return {
+        value: String,
+    },
 
     // Instead of a plain DeclareVariable, we instead allocate space and initialize it.
     AllocStack {
@@ -147,13 +209,19 @@ pub enum IRInstruction {
     },
 
     // A simple assignment that stores a computed temporary into a variable.
-    Assign { dest: String, src: String },
+    Assign {
+        dest: String,
+        src: String,
+    },
 
     // Labels for jumps and branch targets.
     Label(String),
 
     // Constant loading instruction.
-    LoadConstant { dest: String, value: i64 },
+    LoadConstant {
+        dest: String,
+        value: i64,
+    },
 }
 
 #[derive(Debug)]

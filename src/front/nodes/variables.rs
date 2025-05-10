@@ -1,6 +1,12 @@
 use colored::Colorize;
 
-use crate::{front::{semantic::{SemanticContext, Symbol}, token::Position}, middle::ir::{IRContext, IRInstruction, IRType, IRUnit}};
+use crate::{
+    front::{
+        semantic::{SemanticContext, Symbol},
+        token::Position,
+    },
+    middle::ir::{IRContext, IRInstruction, IRType, IRUnit},
+};
 
 use super::{expr::Expr, node::Node, r#type::Type};
 
@@ -27,8 +33,14 @@ impl Node for VariableDeclaration {
             return Err(format!("Variable '{}' already declared", self.id));
         }
         // Add to symbol table.
-        ctx.add_symbol(&self.id, (Symbol::Variable(self.var_type.clone()), self.position.clone()));
-        
+        ctx.add_symbol(
+            &self.id,
+            (
+                Symbol::Variable(self.var_type.clone()),
+                self.position.clone(),
+            ),
+        );
+
         Ok(())
     }
 
@@ -51,7 +63,7 @@ impl Node for Assignment {
             self.lhs,
             width = indentation
         );
-        
+
         let pos = format!("{}:{}", self.value.1.line, self.value.1.index);
         print!("{}{} |", pos, " ".repeat(10 - pos.len()));
         self.value.0.display(indentation + 4);
@@ -68,7 +80,7 @@ impl Node for Assignment {
 }
 
 pub struct WalrusDeclaration {
-    pub id: String,        // variable name
+    pub id: String,                     // variable name
     pub _initializer: (Expr, Position), // storing the initializer expression
 }
 
@@ -118,7 +130,7 @@ impl Node for DeclarationAssignment {
         let pos_decl = format!("{}:{}", self.declaration.1.line, self.declaration.1.index);
         print!("{}{} |", pos_decl, " ".repeat(10 - pos_decl.len()));
         self.declaration.0.display(indentation + 4);
-        
+
         let pos_assign = format!("{}:{}", self.assignment.1.line, self.assignment.1.index);
         print!("{}{} |", pos_assign, " ".repeat(10 - pos_assign.len()));
         self.assignment.0.display(indentation + 4);
@@ -154,4 +166,3 @@ impl Node for DeclarationAssignment {
         vec![IRUnit::Global(instructions)]
     }
 }
-

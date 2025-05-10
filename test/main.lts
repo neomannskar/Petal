@@ -1,10 +1,40 @@
-fn add(a: i32, b: i32) -> i32 {
-    ret a + b;
+/*
+@macro plus(x, y) {
+    add(x, y)
+}
+*/
+
+fn add(a: i32, b: i32)
+-> i32 {
+    ret (a + b) as i32;
 }
 
 fn main() -> i32 {
-    if 0 {
+    let x: i32 = 0;
+    
+    if true {
         ret 0;
+    } else if false {
+        if 1 {
+            ret 0;
+        } else {
+            ret 2;
+        }
+    } else {
+        ret 1;
     }
+
+    loop {
+        break;
+    }
+
+    /* for let x in 0..10 {
+
+    } */
+
+    while 1 {
+        continue;
+    }
+
     ret add(1, 2);
 }

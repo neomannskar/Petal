@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use crate::middle::ir::IRInstruction;
+use std::collections::HashMap;
 
 // We assume you have defined a simple allocation type:
 #[derive(Debug, Clone)]
@@ -19,7 +19,7 @@ pub fn extract_virtual_registers(inst: &IRInstruction) -> Vec<String> {
         | IRInstruction::Div { dest, op1, op2 }
         | IRInstruction::Mod { dest, op1, op2 }
         | IRInstruction::And { dest, op1, op2 }
-        | IRInstruction::Or  { dest, op1, op2 }
+        | IRInstruction::Or { dest, op1, op2 }
         | IRInstruction::Xor { dest, op1, op2 }
         | IRInstruction::ShiftLeft { dest, op1, op2 }
         | IRInstruction::ShiftRight { dest, op1, op2 } => {
@@ -78,7 +78,10 @@ pub fn extract_virtual_registers(inst: &IRInstruction) -> Vec<String> {
 /// In a real compiler, you would inspect whether an operand is a definition or use and insert appropriate
 /// load or store instructions. For our basic example, we substitute every virtual register operand with
 /// its physical mapping (if it is a register) or with a memory operand string (if spilled).
-pub fn rewrite_instruction(inst: IRInstruction, alloc_map: &HashMap<String, Alloc>) -> Vec<IRInstruction> {
+pub fn rewrite_instruction(
+    inst: IRInstruction,
+    alloc_map: &HashMap<String, Alloc>,
+) -> Vec<IRInstruction> {
     // Here we match on the instruction and simply substitute operands.
     // A full implementation must also insert extra load/store instructions for spilled registers.
     match inst {
@@ -103,7 +106,7 @@ pub fn rewrite_instruction(inst: IRInstruction, alloc_map: &HashMap<String, Allo
             }]
         }
         // … similarly for other binary operations.
-        _ => vec![inst],  // For now, return the instruction unchanged.
+        _ => vec![inst], // For now, return the instruction unchanged.
     }
 }
 
@@ -127,7 +130,7 @@ fn substitute(virt: &String, alloc_map: &HashMap<String, Alloc>) -> String {
 /// In a real system you’d compute live ranges and build an interference graph.
 pub fn perform_spill_pass(
     instructions: Vec<IRInstruction>,
-    available_regs: &mut Vec<String>
+    available_regs: &mut Vec<String>,
 ) -> (Vec<IRInstruction>, HashMap<String, Alloc>) {
     let mut alloc_map: HashMap<String, Alloc> = HashMap::new();
 

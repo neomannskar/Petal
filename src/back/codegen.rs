@@ -1,5 +1,5 @@
-use crate::middle::ir::{IRModule, IRInstruction};
 use super::target::Target;
+use crate::middle::ir::{IRInstruction, IRModule};
 
 pub struct Generator {
     pub ir: IRModule,
@@ -8,75 +8,56 @@ pub struct Generator {
 
 impl Generator {
     pub fn new(ir: IRModule, target: Target) -> Generator {
-        Generator {
-            ir,
-            target: target,
-        }
+        Generator { ir, target: target }
     }
 
     pub fn generate(&mut self) -> String {
         let mut asm = String::new();
         asm.push_str(".section .text\n\n");
-    
+
         // Emit globals.
         for inst in &self.ir.globals {
             asm.push_str(&self.generate_instruction(inst));
             asm.push_str("\n");
         }
-    
+
         // Emit functions.
         for function in &self.ir.functions {
             // Use the target API to get the global directive and function label.
             asm.push_str(
-                format!(
-                    "    {} {}\n",
-                    self.target.global_directive(),
-                    function.id
-                )
-                .as_str(),
+                format!("    {} {}\n", self.target.global_directive(), function.id).as_str(),
             );
-            asm.push_str(
-                format!("{}:\n", self.target.function_label(&function.id)).as_str(),
-            );
-    
+            asm.push_str(format!("{}:\n", self.target.function_label(&function.id)).as_str());
+
             // Function prologue.
             asm.push_str(format!("    {}   %rbp\n", self.target.push_instruction()).as_str());
             asm.push_str("    movq    %rsp, %rbp\n");
-    
+
             for inst in &function.instructions {
                 asm.push_str(&self.generate_instruction(inst));
                 asm.push_str("\n");
             }
-    
+
             // Function epilogue.
             asm.push_str(format!("    {}    %rbp\n", self.target.pop_instruction()).as_str());
             asm.push_str("    ret\n\n");
         }
-    
+
         asm
     }
-    
+
     /// Translates an IRInstruction into target-specific assembly code.
     fn generate_instruction(&self, inst: &IRInstruction) -> String {
         match inst {
             IRInstruction::Add { dest, op1, op2 } => {
                 // Compute dest = op1 + op2.
-                format!(
-                    "    movl {}, {}\n    addl {}, {}",
-                    op1, dest, op2, dest
-                )
+                format!("    movl {}, {}\n    addl {}, {}", op1, dest, op2, dest)
             }
             IRInstruction::Sub { dest, op1, op2 } => {
-                format!(
-                    "    movl {}, {}\n    subl {}, {}",
-                    op1, dest, op2, dest
-                )
+                format!("    movl {}, {}\n    subl {}, {}", op1, dest, op2, dest)
             }
             IRInstruction::Mul { dest, op1, op2 } => {
-                format!(
-                    "    movl {}, {}\n    imull {}, {}",
-                    op1, dest, op2, dest
-                )
+                format!("    movl {}, {}\n    imull {}, {}", op1, dest, op2, dest)
             }
             IRInstruction::Div { dest, op1, op2 } => {
                 // For x86 division the dividend must be in %eax and the remainder is in %edx.
@@ -92,40 +73,22 @@ impl Generator {
                 )
             }
             IRInstruction::And { dest, op1, op2 } => {
-                format!(
-                    "    movl {}, {}\n    andl {}, {}",
-                    op1, dest, op2, dest
-                )
+                format!("    movl {}, {}\n    andl {}, {}", op1, dest, op2, dest)
             }
             IRInstruction::Or { dest, op1, op2 } => {
-                format!(
-                    "    movl {}, {}\n    orl {}, {}",
-                    op1, dest, op2, dest
-                )
+                format!("    movl {}, {}\n    orl {}, {}", op1, dest, op2, dest)
             }
             IRInstruction::Xor { dest, op1, op2 } => {
-                format!(
-                    "    movl {}, {}\n    xorl {}, {}",
-                    op1, dest, op2, dest
-                )
+                format!("    movl {}, {}\n    xorl {}, {}", op1, dest, op2, dest)
             }
             IRInstruction::ShiftLeft { dest, op1, op2 } => {
-                format!(
-                    "    movl {}, {}\n    shll {}, {}",
-                    op1, dest, op2, dest
-                )
+                format!("    movl {}, {}\n    shll {}, {}", op1, dest, op2, dest)
             }
             IRInstruction::ShiftRight { dest, op1, op2 } => {
-                format!(
-                    "    movl {}, {}\n    shrl {}, {}",
-                    op1, dest, op2, dest
-                )
+                format!("    movl {}, {}\n    shrl {}, {}", op1, dest, op2, dest)
             }
             IRInstruction::Not { dest, src } => {
-                format!(
-                    "    movl {}, {}\n    notl {}",
-                    src, dest, dest
-                )
+                format!("    movl {}, {}\n    notl {}", src, dest, dest)
             }
             IRInstruction::Load { dest, src } => {
                 // Here, src is assumed to be complete—e.g. a memory operand like "-4(%rbp)".
@@ -145,7 +108,11 @@ impl Generator {
                 asm.push_str(&format!("    movl %eax, {}", dest));
                 asm
             }
-            IRInstruction::Branch { condition, true_label, false_label } => {
+            IRInstruction::Branch {
+                condition,
+                true_label,
+                false_label,
+            } => {
                 format!(
                     "    cmpl $0, {}\n    jne {}\n    jmp {}",
                     condition, true_label, false_label
@@ -154,13 +121,23 @@ impl Generator {
             IRInstruction::Return { value } => {
                 format!("    movl {}, %eax", value)
             }
-            IRInstruction::AllocStack { name, var_type, initial_value } => {
+            IRInstruction::AllocStack {
+                name,
+                var_type,
+                initial_value,
+            } => {
                 // We emit a comment. In a complete system, this would be replaced by information
                 // from your IRContext's allocation mapping.
                 if let Some(val) = initial_value {
-                    format!("    # AllocStack: {} of type {:?} with initializer {}", name, var_type, val)
+                    format!(
+                        "    # AllocStack: {} of type {:?} with initializer {}",
+                        name, var_type, val
+                    )
                 } else {
-                    format!("    # AllocStack: {} of type {:?} without initializer", name, var_type)
+                    format!(
+                        "    # AllocStack: {} of type {:?} without initializer",
+                        name, var_type
+                    )
                 }
             }
             IRInstruction::Assign { dest, src } => {

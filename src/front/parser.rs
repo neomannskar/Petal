@@ -1,18 +1,22 @@
 use crate::front::ast::Ast;
 use crate::front::token::Token;
 
+use super::nodes::body::Body;
+use super::nodes::cast::Cast;
+use super::nodes::loops::{Break, Continue, ForLoop, Loop, WhileLoop};
+use super::nodes::parameter::Parameter;
 use super::nodes::expr::{BinaryExpr, Expr, ExpressionStatement};
 use super::nodes::function::{
-    FunctionBody, FunctionDefinition, FunctionParameter, FunctionReturnType, Return,
+    FunctionDefinition, FunctionReturnType, Return,
 };
 
 use super::nodes::node::Node;
 use super::nodes::operator::Operator;
-use super::nodes::r#type::Type;
+use super::nodes::r#type::{PrimitiveType, Type};
 use super::nodes::variables::{
     Assignment, DeclarationAssignment, VariableDeclaration, WalrusDeclaration,
 };
-use super::semantic::{SemanticContext, Symbol};
+use super::nodes::branching::{ElseStatement, IfStatement};
 use super::token::Position;
 
 macro_rules! _here {
@@ -151,9 +155,7 @@ impl Parser {
         Ok(ast)
     }
 
-    pub fn parse_fn<'a>(
-        &mut self
-    ) -> Result<(FunctionDefinition, Position), ParserError> {
+    pub fn parse_fn<'a>(&mut self) -> Result<(FunctionDefinition, Position), ParserError> {
         // Expect a function name
         let (func_name, func_pos) = match self.consume() {
             Ok((Token::Identifier(name), pos)) => (name.clone(), pos.clone()),
@@ -184,7 +186,7 @@ impl Parser {
         };
 
         // Parse the function body
-        let (body, body_pos) = match self.parse_fn_body() {
+        let (body, body_pos) = match self.parse_body() {
             Ok(bod) => bod,
             Err(e) => {
                 // Change later
@@ -192,17 +194,18 @@ impl Parser {
             }
         };
 
-        Ok((FunctionDefinition {
-            id: (func_name, func_pos.clone()),
-            parameters,
-            return_type: return_type,
-            body: (Box::new(body), body_pos),
-        }, func_pos))
+        Ok((
+            FunctionDefinition {
+                id: (func_name, func_pos.clone()),
+                parameters,
+                return_type: return_type,
+                body: (Box::new(body), body_pos),
+            },
+            func_pos,
+        ))
     }
 
-    fn parse_fn_parameters(
-        &mut self
-    ) -> Result<Vec<(FunctionParameter, Position)>, ParserError> {
+    fn parse_fn_parameters(&mut self) -> Result<Vec<(Parameter, Position)>, ParserError> {
         let mut parameters = Vec::new();
 
         // Expect an opening parenthesis.
@@ -278,11 +281,14 @@ impl Parser {
             };
 
             // Create the function parameter.
-            parameters.push((FunctionParameter {
-                id: param_name,
-                var_type: param_type,
-                position: pos.clone(),
-            }, pos.clone()));
+            parameters.push((
+                Parameter {
+                    id: param_name,
+                    var_type: param_type,
+                    position: pos.clone(),
+                },
+                pos.clone(),
+            ));
 
             // Now, check if there is a comma or the close parenthesis.
             if let Some((next_token, _)) = self.peek() {
@@ -324,15 +330,9 @@ impl Parser {
     fn parse_fn_return_type(&mut self) -> Result<(FunctionReturnType, Position), ParserError> {
         match self.consume() {
             Ok((Token::Arrow, _)) => match self.consume() {
-                Ok((Token::I32, pos)) => {
-                    Ok((FunctionReturnType(Type::basic("i32")),  pos))
-                }
-                Ok((Token::Char, pos)) => {
-                    Ok((FunctionReturnType(Type::basic("char")),  pos))
-                }
-                Ok((Token::Str, pos)) => {
-                    Ok((FunctionReturnType(Type::basic("str")),  pos))
-                }
+                Ok((Token::I32, pos)) => Ok((FunctionReturnType(Type::basic("i32")), pos)),
+                Ok((Token::Char, pos)) => Ok((FunctionReturnType(Type::basic("char")), pos)),
+                Ok((Token::Str, pos)) => Ok((FunctionReturnType(Type::basic("str")), pos)),
                 Ok(x) => {
                     dbg!(x);
                     todo!("[x] parse_fn_return_type()");
@@ -362,7 +362,7 @@ impl Parser {
         }
     }
 
-    fn parse_fn_body(&mut self) -> Result<(FunctionBody, Position), ParserError> {
+    fn parse_body(&mut self) -> Result<(Body, Position), ParserError> {
         // Expect an opening curly brace and consume it.
         let (lcurly, pos) = self.consume()?;
         if lcurly != Token::LCurl {
@@ -373,7 +373,7 @@ impl Parser {
             });
         }
 
-        let mut body = FunctionBody {
+        let mut body = Body {
             children: Vec::new(),
         };
 
@@ -418,16 +418,19 @@ impl Parser {
         // If the next token is immediately a right parenthesis, then there are no arguments.
         if let Some((Token::RPar, pos)) = self.peek() {
             self.consume()?; // Consume RPar
-            return Ok((Expr::FunctionCall {
-                function: function_id,
-                arguments,
-            }, pos));
+            return Ok((
+                Expr::FunctionCall {
+                    function: function_id,
+                    arguments,
+                },
+                pos,
+            ));
         }
 
         // Otherwise, loop to parse arguments.
         loop {
             // Parse an expression argument.
-            let (arg, pos) = self.parse_expression()?;
+            let (arg, pos) = self.parse_cast()?;
             arguments.push((arg, pos.clone()));
 
             // Peek at the next token to decide what to do.
@@ -457,13 +460,99 @@ impl Parser {
             }
         }
 
-        Ok((Expr::FunctionCall {
-            function: function_id,
-            arguments,
-        }, pos))
+        Ok((
+            Expr::FunctionCall {
+                function: function_id,
+                arguments,
+            },
+            pos,
+        ))
+    }
+
+    fn parse_type(&mut self) -> Result<(Box<dyn Node>, Position), ParserError> {
+        if let Some((tok, tok_pos)) = self.peek() {
+            match tok {
+                Token::Identifier(id) => {
+                    return Ok((Box::new(Type::Custom(id)), tok_pos))
+                }
+                Token::Bool =>  return Ok((Box::new(Type::Primitive(PrimitiveType::Bool)), tok_pos)),
+                Token::I32 =>   return Ok((Box::new(Type::Primitive(PrimitiveType::I32)), tok_pos)),
+                Token::I64 =>   return Ok((Box::new(Type::Primitive(PrimitiveType::I64)), tok_pos)),
+                Token::U32 =>   return Ok((Box::new(Type::Primitive(PrimitiveType::U32)), tok_pos)),
+                Token::U64 =>   return Ok((Box::new(Type::Primitive(PrimitiveType::U64)), tok_pos)),
+                Token::Usize => return Ok((Box::new(Type::Primitive(PrimitiveType::Usize)), tok_pos)),
+                Token::F32 =>   return Ok((Box::new(Type::Primitive(PrimitiveType::F32)), tok_pos)),
+                Token::F64 =>   return Ok((Box::new(Type::Primitive(PrimitiveType::F64)), tok_pos)),
+                Token::Char =>  return Ok((Box::new(Type::Primitive(PrimitiveType::Char)), tok_pos)),
+                Token::Str =>   return Ok((Box::new(Type::Primitive(PrimitiveType::Str)), tok_pos)),
+                _ => todo!(),
+            }
+        } else {
+            todo!()
+        }
+    }
+
+    fn parse_type_as_string(&mut self) -> Result<String, ParserError> {
+        if let Some((tok, tok_pos)) = self.peek() {
+            let t = match tok {
+                Token::Identifier(id) => id.clone(),
+                Token::Bool =>  "bool".to_string(),
+                Token::I32 =>   "i32".to_string(),
+                Token::I64 =>   "i64".to_string(),
+                Token::U32 =>   "u32".to_string(),
+                Token::U64 =>   "u64".to_string(),
+                Token::Usize => "usize".to_string(),
+                Token::F32 =>   "f32".to_string(),
+                Token::F64 =>   "f64".to_string(),
+                Token::Char =>  "char".to_string(),
+                Token::Str =>   "str".to_string(),
+                _ => todo!(),
+            };
+
+            let (_, _) = self.consume()?;
+
+            Ok(t)
+        } else {
+            todo!()
+        }
     }
 
     // --- Expression Parsing Functions ---
+
+    fn parse_cast(&mut self) -> Result<(Expr, Position), ParserError> {
+        // 1) Parse everything up to (but not including) an `as`
+        let (expr, pos) = self.parse_expression()?;
+
+        // 2) If the next token is `as`, consume it and parse a type name
+        if let Some((Token::As, _)) = self.peek() {
+            // consume the `as` keyword
+            let (_, as_pos) = self.consume()?;
+
+            // parse_type returns a String, e.g. "i32" or "MyStruct"
+            let type_name = self.parse_type_as_string()?;
+
+            const PRIMITIVES: &[&str] = &[
+                "u8", "u16", "u32", "u64", "u128",
+                "i8", "i16", "i32", "i64", "i128",
+                "f32", "f64",
+                "bool", "char", "str",
+            ];
+
+            // 3) Decide primitive vs non‐primitive
+            let cast_to = if PRIMITIVES.contains(&type_name.as_str()) {
+                Cast::Primitive((type_name, as_pos))
+            } else {
+                Cast::NonPrimitive((type_name, as_pos))
+            };
+
+            let cast_expr = Expr::Cast((cast_to, Box::new(expr)), pos.clone());
+
+            Ok((cast_expr, pos))
+        } else {
+            // no `as` → just return the original expression
+            Ok((expr, pos))
+        }
+    }
 
     /// Parses an expression, handling addition and subtraction.
     fn parse_expression(&mut self) -> Result<(Expr, Position), ParserError> {
@@ -480,11 +569,14 @@ impl Parser {
                         Token::Minus => Operator::Minus,
                         _ => unreachable!(),
                     };
-                    expr = Expr::Binary((Box::new(BinaryExpr {
-                        op,
-                        left: (expr, pos.clone()),
-                        right: (right, right_pos),
-                    }), pos.clone()));
+                    expr = Expr::Binary((
+                        Box::new(BinaryExpr {
+                            op,
+                            left: (expr, pos.clone()),
+                            right: (right, right_pos),
+                        }),
+                        pos.clone(),
+                    ));
                 }
                 _ => break,
             }
@@ -506,25 +598,29 @@ impl Parser {
                         Token::Percent => Operator::Percent,
                         _ => unreachable!(),
                     };
-    
+
                     // Since Position only marks the start in your setup,
                     // we simply consistently use expr_pos for the expression's position.
-                    expr = Expr::Binary((Box::new(BinaryExpr {
-                        left: (expr, expr_pos.clone()),
-                        op,
-                        right: (right, right_pos),
-                    }), expr_pos.clone()));
+                    expr = Expr::Binary((
+                        Box::new(BinaryExpr {
+                            left: (expr, expr_pos.clone()),
+                            op,
+                            right: (right, right_pos),
+                        }),
+                        expr_pos.clone(),
+                    ));
                 }
                 _ => break,
             }
         }
         Ok((expr, expr_pos))
-    }    
+    }
 
     /// Parses a factor: a number, an identifier, or a parenthesized expression.
     fn parse_factor(&mut self) -> Result<(Expr, Position), ParserError> {
         let (token, pos) = self.consume()?;
         match token {
+            Token::BooleanLiteral(bool) => Ok((Expr::Boolean((bool, pos.clone())), pos)),
             Token::NumberLiteral(num) => Ok((Expr::Number((num, pos.clone())), pos)),
             Token::CharacterLiteral(ch) => Ok((Expr::Character((ch, pos.clone())), pos)),
             Token::StringLiteral(str) => Ok((Expr::String((str, pos.clone())), pos)),
@@ -540,7 +636,7 @@ impl Parser {
                 Ok((Expr::VariableCall((id, pos.clone())), pos))
             }
             Token::LPar => {
-                let expr = self.parse_expression()?;
+                let expr = self.parse_cast()?;
                 match self.consume()? {
                     (Token::RPar, _) => Ok(expr),
                     (unexpected, pos) => Err(ParserError::UnexpectedToken {
@@ -558,48 +654,109 @@ impl Parser {
         }
     }
 
-    fn parse_statement(&mut self) -> Result<(Box<dyn Node>, Position), ParserError> {
-        // First, if the statement starts with 'ret', handle it.
-        if let Some((Token::Ret, ret_pos)) = self.peek() {
-            let (_, _) = self.consume()?; // Consume 'ret'
-            let (expr, expr_pos) = self.parse_expression()?;
-            let (next_token, next_pos) = self.consume()?;
-            if next_token != Token::Semicolon {
-                return Err(ParserError::SyntaxError {
-                    message: "Expected ';' after return expression.".to_string(),
-                    file: self.file.clone(),
-                    position: next_pos,
-                });
-            }
-            return Ok((Box::new(Return { value: (expr, expr_pos) }), ret_pos));
-        }
+    fn parse_if_statement(&mut self) -> Result<(Box<dyn Node>, Position), ParserError> {
+        let (_, if_pos) = self.consume()?; // Consume 'if'
+
+        // Parse the condition (expression)
+
+        let (expr, expr_pos) = self.parse_cast()?;
+        
+        /* match expr {
+            Expr::Number((num, pos)) => {
+                println!("Number here: {} at {:?}", num, pos);
+                panic!("");
+            },
+            Expr::Character(_) => todo!(),
+            Expr::String(_) => todo!(),
+            Expr::Binary(binary_expr) => todo!(),
+            Expr::VariableCall((id, resolved)) => todo!(),
+            Expr::FunctionCall { function, arguments } => todo!(),
+        } */
+
+        let (body, body_pos) = self.parse_body()?;
+
+        return Ok((Box::new(IfStatement { condition: (expr, expr_pos), branch: (body, body_pos) }), if_pos))
+    }
+
+    fn parse_else_statement(&mut self) -> Result<(Box<dyn Node>, Position), ParserError> {
+        let (_, else_pos) = self.consume()?; // Consume 'else'
+
+        // Parse the condition (expression)
 
         if let Some((Token::If, _)) = self.peek() {
-            let (_, _) = self.consume()?; // Consume 'if'
+            let (_, else_pos) = self.consume()?; // Consume 'if'
 
-            // Condition
+            let (expr, expr_pos) = self.parse_cast()?;
+        
+            let (body, body_pos) = self.parse_body()?;
 
-            let (stat, pos) = self.parse_statement()?; // Parse the condition (expression)
-            // let (expr, pos) = self.parse_expression()?;
-            /*
-            match expr {
-                Expr::Number(_) => todo!(),
-                Expr::Character(_) => todo!(),
-                Expr::String(_) => todo!(),
-                Expr::Binary(binary_expr) => todo!(),
-                Expr::Identifier(_) => todo!(),
-                Expr::VariableCall { id, resolved } => todo!(),
-                Expr::FunctionCall { function, arguments } => todo!(),
-            }
-            */
-            // return Ok(Box::new(IfStatement))
+            return Ok((Box::new(ElseStatement { condition: Some((expr, expr_pos)), branch: (body, body_pos) }), else_pos));
+        } else {
+            let (body, body_pos) = self.parse_body()?;
+            
+            return Ok((Box::new(ElseStatement { condition: None, branch: (body, body_pos) }), else_pos));
         }
 
-        // If the statement begins with an identifier, check the second token.
-        if let Some((Token::Identifier(_), _)) = self.peek() {
-            let second = self.tokens.get(self.position + 1);
-            if let Some((second_token, _)) = second {
-                match second_token {
+        /* match expr {
+            Expr::Number((num, pos)) => {
+                println!("Number here: {} at {:?}", num, pos);
+                panic!("");
+            },
+            Expr::Character(_) => todo!(),
+            Expr::String(_) => todo!(),
+            Expr::Binary(binary_expr) => todo!(),
+            Expr::VariableCall((id, resolved)) => todo!(),
+            Expr::FunctionCall { function, arguments } => todo!(),
+        } */
+    }
+
+    fn parse_loop(&mut self) -> Result<(Box<dyn Node>, Position), ParserError> {
+        let (_, loop_pos) = self.consume()?;
+
+        let (body, body_pos) = self.parse_body()?;
+
+        return Ok((Box::new(Loop { body: (body, body_pos) }), loop_pos));
+    }
+
+    fn parse_while_loop(&mut self) -> Result<(Box<dyn Node>, Position), ParserError> {
+        let (_, while_loop_pos) = self.consume()?;
+
+        let (expr, expr_pos) = self.parse_cast()?;
+
+        let (body, body_pos) = self.parse_body()?;
+
+        return Ok((Box::new(WhileLoop {
+            condition: (expr, expr_pos),
+            body: (body, body_pos),
+        }), while_loop_pos));
+    }
+
+    fn parse_for_loop(&mut self) -> Result<(Box<dyn Node>, Position), ParserError> {
+        todo!();
+        
+        /* 
+        let (_, for_loop_pos) = self.consume()?;
+
+        let (iter, iter_pos) = self.parse_explicit_decl()?;
+
+        let (expr, expr_pos) = self.parse_cast()?;
+
+        let (body, body_pos) = self.parse_body()?;
+
+        return Ok((Box::new(ForLoop {
+            iter: (iter, iter_pos),
+            condition: (expr, expr_pos),
+            body: (body, body_pos),
+        }), while_loop_pos));
+        */
+    }
+
+    fn parse_let_decl(&mut self) -> Result<(Box<dyn Node>, Position), ParserError> {
+        let (_, let_pos) = self.consume()?; // Consume the 'let'
+        
+        if let Some((Token::Identifier(id), id_pos)) = self.peek(){
+            if let Some((next, next_pos)) = self.tokens.get(self.position + 1) {
+                match next {
                     Token::Colon => {
                         // Call our declaration (or declaration-assignment) helper.
                         return self.parse_explicit_decl();
@@ -608,13 +765,119 @@ impl Parser {
                         // You could add a dedicated helper for walrus declarations if desired.
                         return self.parse_walrus_decl();
                     }
+                    _ => {
+                        todo!();
+                    }
+                }
+            }
+        }
+
+        let (tok, pos) = self.consume()?;
+        Err(ParserError::UnexpectedToken {
+            token: tok,
+            file: self.file.clone(),
+            position: pos,
+        })
+    }
+
+    fn parse_statement(&mut self) -> Result<(Box<dyn Node>, Position), ParserError> {
+        // First, if the statement starts with 'ret', handle it.
+        if let Some((Token::Ret, ret_pos)) = self.peek() {
+            let (_, _) = self.consume()?; // Consume 'ret'
+            let (expr, expr_pos) = self.parse_cast()?;
+            // dbg!(&expr);
+            let (next_token, next_pos) = self.consume()?;
+            // dbg!(&next_token);
+            if next_token != Token::Semicolon {
+                return Err(ParserError::SyntaxError {
+                    message: "Expected ';' after return expression.".to_string(),
+                    file: self.file.clone(),
+                    position: next_pos,
+                });
+            }
+            return Ok((
+                Box::new(Return {
+                    value: (expr, expr_pos),
+                }),
+                ret_pos,
+            ));
+        }
+
+        if let Some((Token::If, _)) = self.peek() {
+            let (if_stat, pos) = self.parse_if_statement()?;
+            return Ok((if_stat, pos));
+        }
+
+        if let Some((Token::Else, _)) = self.peek() {
+            let (else_stat, pos) = self.parse_else_statement()?;
+            return Ok((else_stat, pos));
+        }
+
+        if let Some((Token::Loop, _)) = self.peek() {
+            let (loop_stat, pos) = self.parse_loop()?;
+            return Ok((loop_stat, pos));
+        }
+
+        if let Some((Token::While, _)) = self.peek() {
+            let (while_loop, pos) = self.parse_while_loop()?;
+            return Ok((while_loop, pos));
+        }
+
+        if let Some((Token::For, _)) = self.peek() {
+            let (for_loop, pos) = self.parse_for_loop()?;
+            return Ok((for_loop, pos));
+        }
+
+        if let Some((Token::Break, pos)) = self.peek() {
+            let (_, _) = self.consume()?; // Consume 'ret'
+            let (next_token, next_pos) = self.consume()?;
+            if next_token != Token::Semicolon {
+                return Err(ParserError::SyntaxError {
+                    message: "Expected ';' after 'break.".to_string(),
+                    file: self.file.clone(),
+                    position: next_pos,
+                });
+            }
+            return Ok((Box::new(
+                    Break
+                ),
+                pos,
+            ));
+        }
+        
+        if let Some((Token::Continue, pos)) = self.peek() {
+            let (_, _) = self.consume()?; // Consume 'break'
+            let (next_token, next_pos) = self.consume()?;
+            if next_token != Token::Semicolon {
+                return Err(ParserError::SyntaxError {
+                    message: "Expected ';' after 'continue'.".to_string(),
+                    file: self.file.clone(),
+                    position: next_pos,
+                });
+            }
+            return Ok((Box::new(
+                    Continue
+                ),
+                pos,
+            ));
+        }
+
+        if let Some((Token::Let, _)) = self.peek() {
+            return self.parse_let_decl();
+        }
+
+        // If the statement begins with an identifier, check the second token.
+        if let Some((Token::Identifier(_), _)) = self.peek() {
+            let second = self.tokens.get(self.position + 1);
+            if let Some((second_token, _)) = second {
+                match second_token {
                     Token::Equal => {
                         // If assignment appears without a preceding declaration, handle it.
                         return self.parse_assignment();
                     }
                     _ => {
                         // Fall back to parsing an expression statement.
-                        let (expr, pos) = self.parse_expression()?;
+                        let (expr, pos) = self.parse_cast()?;
                         if let Some((Token::Semicolon, _)) = self.peek() {
                             self.consume()?; // consume semicolon.
                         }
@@ -626,7 +889,7 @@ impl Parser {
 
         // If starting token is a number or left parenthesis, treat it as an expression.
         if let Some((Token::NumberLiteral(_) | Token::LPar, _)) = self.peek() {
-            let (expr, pos) = self.parse_expression()?;
+            let (expr, pos) = self.parse_cast()?;
             if let Some((Token::Semicolon, _)) = self.peek() {
                 self.consume()?;
             }
@@ -642,9 +905,7 @@ impl Parser {
         })
     }
 
-    fn parse_assignment(
-        &mut self
-    ) -> Result<(Box<dyn Node>, Position), ParserError> {
+    fn parse_assignment(&mut self) -> Result<(Box<dyn Node>, Position), ParserError> {
         // Pattern: Identifier, Equal, Expression, Semicolon.
 
         // Consume the LHS identifier.
@@ -656,17 +917,10 @@ impl Parser {
         };
 
         // Consume the '=' token.
-        let (equal, pos) = self.consume()?;
-        if equal != Token::Equal {
-            return Err(ParserError::SyntaxError {
-                message: "Expected '=' in assignment statement.".to_string(),
-                file: self.file.clone(),
-                position: pos,
-            });
-        }
+        let (_, _) = self.consume()?;
 
         // Parse the expression for the right-hand side.
-        let (expr, pos) = self.parse_expression()?;
+        let (expr, pos) = self.parse_cast()?;
 
         // Expect a terminating semicolon.
         let (semi, semi_pos) = self.consume()?;
@@ -679,12 +933,16 @@ impl Parser {
         }
 
         // Build and return an Assignment node.
-        Ok((Box::new(Assignment { lhs, value: (expr, pos.clone()) }), pos))
+        Ok((
+            Box::new(Assignment {
+                lhs,
+                value: (expr, pos.clone()),
+            }),
+            pos,
+        ))
     }
 
-    fn parse_explicit_decl(
-        &mut self
-    ) -> Result<(Box<dyn Node>, Position), ParserError> {
+    fn parse_explicit_decl(&mut self) -> Result<(Box<dyn Node>, Position), ParserError> {
         // Consume the identifier.
         let (id_token, id_pos) = self.consume()?;
         let id = if let Token::Identifier(name) = id_token {
@@ -733,7 +991,7 @@ impl Parser {
             // Consume the '=' token.
             self.consume()?;
             // Parse initializer expression.
-            let (initializer_expr, pos) = self.parse_expression()?;
+            let (initializer_expr, pos) = self.parse_cast()?;
             // Expect a semicolon.
             let (semi, semi_pos) = self.consume()?;
             if semi != Token::Semicolon {
@@ -749,17 +1007,20 @@ impl Parser {
                 var_type: var_type.clone(),
                 position: id_pos.clone(),
             };
-        
+
             // ...and an assignment node with lhs being the variable name.
             let assign = Assignment {
                 lhs: id,
                 value: (initializer_expr, pos.clone()),
             };
             // Combine them into a DeclarationAssignment node.
-            Ok((Box::new(DeclarationAssignment {
-                declaration: (decl, id_pos.clone()),
-                assignment: (assign, pos),
-            }), id_pos))
+            Ok((
+                Box::new(DeclarationAssignment {
+                    declaration: (decl, id_pos.clone()),
+                    assignment: (assign, pos),
+                }),
+                id_pos,
+            ))
         } else {
             // Otherwise, if there's no '=' token, this is a plain declaration.
             let (semi, semi_pos) = self.consume()?;
@@ -770,17 +1031,18 @@ impl Parser {
                     position: semi_pos,
                 });
             }
-            Ok((Box::new(VariableDeclaration {
-                id: id,
-                var_type,
-                position: id_pos.clone(),
-            }), id_pos))
+            Ok((
+                Box::new(VariableDeclaration {
+                    id: id,
+                    var_type,
+                    position: id_pos.clone(),
+                }),
+                id_pos,
+            ))
         }
     }
 
-    fn parse_walrus_decl(
-        &mut self
-    ) -> Result<(Box<dyn Node>, Position), ParserError> {
+    fn parse_walrus_decl(&mut self) -> Result<(Box<dyn Node>, Position), ParserError> {
         // Pattern: Identifier, Walrus, Expression, Semicolon.
         let (id_token, pos) = self.consume()?; // Identifier
         let id = if let Token::Identifier(name) = id_token {
@@ -799,7 +1061,7 @@ impl Parser {
         }
 
         // Parse the initializer expression.
-        let (expr, expr_pos) = self.parse_expression()?;
+        let (expr, expr_pos) = self.parse_cast()?;
 
         // Expect semicolon.
         let (semi, semi_pos) = self.consume()?;
@@ -811,10 +1073,13 @@ impl Parser {
             });
         }
 
-        Ok((Box::new(WalrusDeclaration {
-            id: id,
-            _initializer: (expr, expr_pos),
-        }), pos))
+        Ok((
+            Box::new(WalrusDeclaration {
+                id: id,
+                _initializer: (expr, expr_pos),
+            }),
+            pos,
+        ))
     }
 
     fn peek(&self) -> Option<(Token, Position)> {

@@ -4,8 +4,9 @@ use crate::front::nodes::node::Node;
 use crate::front::nodes::operator::Operator;
 use crate::front::semantic::{SemanticContext, Symbol};
 use crate::front::token::Position;
-use crate::middle::ir::{IRContext, IRInstruction, IRUnit, flatten_units};
+use crate::middle::ir::{flatten_units, IRContext, IRInstruction, IRUnit};
 
+use super::cast::Cast;
 use super::r#type::Type;
 
 #[derive(Debug, Clone)]
@@ -17,12 +18,7 @@ pub struct BinaryExpr {
 
 impl Node for BinaryExpr {
     fn display(&self, indentation: usize) {
-        println!(
-            "{:>width$}└───[ {:?}",
-            "",
-            self.op,
-            width = indentation
-        );
+        println!("{:>width$}└───[ {:?}", "", self.op, width = indentation);
     }
 
     fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
@@ -51,7 +47,9 @@ impl Node for BinaryExpr {
 
 #[derive(Debug, Clone)]
 pub enum Expr {
+    Cast((Cast, Box<Expr>), Position),
     Number((String, Position)),
+    Boolean((String, Position)),
     Character((String, Position)),
     String((String, Position)),
     Binary((Box<BinaryExpr>, Position)),
@@ -67,16 +65,25 @@ impl Expr {
     /// A non-fallible version returning the type of the expression.
     pub fn get_type(&self, ctx: &mut SemanticContext) -> Type {
         match self {
+            Expr::Cast((cast, _expr), _) => {
+                match &cast {
+                    Cast::Primitive((cast_type, _)) => {
+                        Type::basic(&cast_type)
+                    }
+                    Cast::NonPrimitive((cast_type, _)) => {
+                        Type::Custom(cast_type.clone())
+                    }
+                }
+            }
+            Expr::Boolean(_) => {
+                Type::basic("bool")
+            }
             Expr::Number(_) => {
                 // By default, we treat literal numbers as i32.
                 Type::basic("i32")
             }
-            Expr::Character(_) => {
-                Type::basic("char")
-            }
-            Expr::String(_) => {
-                Type::basic("str")
-            }
+            Expr::Character(_) => Type::basic("char"),
+            Expr::String(_) => Type::basic("str"),
             Expr::Binary((bin, _)) => {
                 // For simplicity, we assume that a binary expression is valid and
                 // its type is that of its left side.
@@ -92,10 +99,16 @@ impl Expr {
                         // If you have other categories, you could add them here.
                     }
                 } else {
-                    panic!("Undefined identifier: {} on line {} at index {}", id, pos.line, pos.index);
+                    panic!(
+                        "Undefined identifier: {} on line {} at index {}",
+                        id, pos.line, pos.index
+                    );
                 }
             }
-            Expr::FunctionCall { function, arguments: _ } => {
+            Expr::FunctionCall {
+                function,
+                arguments: _,
+            } => {
                 if let Some((symbol, _)) = ctx.lookup(&function.0) {
                     // Expect the looked-up symbol to be a function.
                     if let Symbol::Function(func_type) = symbol {
@@ -113,6 +126,17 @@ impl Expr {
     /// A fallible version that returns an error string on failure.
     pub fn infer_type(&self, ctx: &mut SemanticContext) -> Result<Type, String> {
         match self {
+            Expr::Cast((cast, _), _) => {
+                match cast {
+                    Cast::Primitive((cast_type, _)) => {
+                        Ok(Type::basic(&cast_type))
+                    }
+                    Cast::NonPrimitive((cast_type, _)) => {
+                        Ok(Type::Custom(cast_type.clone()))
+                    }
+                }
+            }
+            Expr::Boolean(_) => Ok(Type::basic("bool")),
             Expr::Number(_) => Ok(Type::basic("i32")),
             Expr::Character(_) => Ok(Type::basic("char")),
             Expr::String(_) => Ok(Type::basic("str")),
@@ -128,7 +152,10 @@ impl Expr {
                     Err(format!("Undefined identifier: {}", id))
                 }
             }
-            Expr::FunctionCall { function, arguments: _ } => {
+            Expr::FunctionCall {
+                function,
+                arguments: _,
+            } => {
                 if let Some((symbol, _)) = ctx.lookup(&function.0) {
                     if let Symbol::Function(func_type) = symbol {
                         Ok(*func_type.return_type.clone())
@@ -218,11 +245,11 @@ impl Expr {
                         op2: t_right,
                     },
                     // For other operators, you can add more cases or leave them unimplemented.
-                    Operator::Walrus 
-                    | Operator::Asign 
-                    | Operator::Equals 
-                    | Operator::NotEquals 
-                    | Operator::Compare 
+                    Operator::Walrus
+                    | Operator::Asign
+                    | Operator::Equals
+                    | Operator::NotEquals
+                    | Operator::Compare
                     | Operator::Not => unimplemented!("Operator not implemented in TAC"),
                 };
                 let mut instructions = Vec::new();
@@ -234,10 +261,7 @@ impl Expr {
             // Character literal: take the first character and convert it to its Unicode (i64) code.
             Expr::Character((ch, _pos)) => {
                 let tmp = ctx.allocate_temp();
-                let code = ch
-                    .chars()
-                    .next()
-                    .expect("Character literal is empty") as i64;
+                let code = ch.chars().next().expect("Character literal is empty") as i64;
                 (
                     tmp.clone(),
                     vec![IRInstruction::LoadConstant {
@@ -268,9 +292,12 @@ impl Expr {
                         src: mem_operand,
                     }],
                 )
-            }            
+            }
             // Function call: generate TAC for each argument and then call the function.
-            Expr::FunctionCall { function, arguments } => {
+            Expr::FunctionCall {
+                function,
+                arguments,
+            } => {
                 let mut instructions = Vec::new();
                 let mut arg_temps = Vec::new();
                 for arg in arguments {
@@ -288,12 +315,21 @@ impl Expr {
             }
             _ => unimplemented!("TAC for this kind of expression is not implemented"),
         }
-    }        
+    }
 }
 
 impl Node for Expr {
     fn display(&self, indentation: usize) {
         match self {
+            Expr::Cast((cast, expr), pos) => {
+                cast.display(indentation + 4);
+                let pos = format!("{}:{}", pos.line, pos.index);
+                print!("{}{} |", pos, " ".repeat(10 - pos.len()));
+                expr.display(indentation + 8);
+            }
+            Expr::Boolean((bool, _)) => {
+                println!("{:>width$}└───[ {}", "", bool.magenta(), width = indentation);
+            }
             Expr::Number((value, _)) => {
                 println!("{:>width$}└───[ `{}`", "", value, width = indentation);
             }
@@ -301,7 +337,12 @@ impl Node for Expr {
                 println!("{:>width$}└───[ '{}'", "", ch, width = indentation);
             }
             Expr::String((str, _)) => {
-                println!("{:>width$}└───[ \"{}\"", "", str.replace("\n", "").replace("\r", ""), width = indentation);
+                println!(
+                    "{:>width$}└───[ \"{}\"",
+                    "",
+                    str.replace("\n", "").replace("\r", ""),
+                    width = indentation
+                );
             }
             Expr::Binary((binary_expr, _)) => {
                 println!(
@@ -315,7 +356,7 @@ impl Node for Expr {
                 let pos = format!("{}:{}", binary_expr.left.1.line, binary_expr.left.1.index);
                 print!("{}{} |", pos, " ".repeat(10 - pos.len()));
                 binary_expr.left.0.display(indentation + 4);
-                
+
                 let pos = format!("{}:{}", binary_expr.right.1.line, binary_expr.right.1.index);
                 print!("{}{} |", pos, " ".repeat(10 - pos.len()));
                 binary_expr.right.0.display(indentation + 4);
@@ -352,16 +393,18 @@ impl Node for Expr {
 
     fn analyze(&self, ctx: &mut SemanticContext) -> Result<(), String> {
         match self {
+            Expr::Cast((_, _), _) => {
+                Ok(())
+            }
+            Expr::Boolean(_) => {
+                Ok(())
+            }
             Expr::Number(_) => {
                 // A literal number is always valid.
                 Ok(())
             }
-            Expr::Character(_) => {
-                Ok(())
-            }
-            Expr::String(_) => {
-                Ok(())
-            }
+            Expr::Character(_) => Ok(()),
+            Expr::String(_) => Ok(()),
             Expr::Binary((bin_expr, _)) => {
                 // Delegate to BinaryExpr's analysis.
                 bin_expr.analyze(ctx)
@@ -393,6 +436,12 @@ impl Node for Expr {
     /// Generate IR for the expression, returning a vector of IRUnit.
     fn ir(&self, ctx: &mut IRContext) -> Vec<IRUnit> {
         match self {
+            Expr::Cast((_, _), _) => {
+                todo!()
+            }
+            Expr::Boolean(_) => {
+                todo!()
+            }
             // For a number literal, allocate a temporary and load a constant.
             Expr::Number((n, _pos)) => {
                 let tmp = ctx.allocate_temp();
@@ -469,11 +518,11 @@ impl Node for Expr {
                         op2: right_temp,
                     },
                     // For operators you haven't implemented yet:
-                    Operator::Walrus 
-                    | Operator::Asign 
-                    | Operator::Equals 
-                    | Operator::NotEquals 
-                    | Operator::Compare 
+                    Operator::Walrus
+                    | Operator::Asign
+                    | Operator::Equals
+                    | Operator::NotEquals
+                    | Operator::Compare
                     | Operator::Not => todo!("Operator {:?} not implemented in IR", op),
                 };
                 // Combine the instructions: first compute the left operand, then the right,
@@ -494,7 +543,10 @@ impl Node for Expr {
             }
             // For a function call, generate IR for each argument, collect their result temporaries,
             // and emit a call instruction.
-            Expr::FunctionCall { function, arguments } => {
+            Expr::FunctionCall {
+                function,
+                arguments,
+            } => {
                 let mut arg_temps: Vec<String> = Vec::new();
                 let mut instructions = Vec::new();
                 for arg in arguments {
@@ -525,9 +577,34 @@ impl Node for ExpressionStatement {
         // Display the underlying expression; you could customize this as needed.
         // For instance:
         match &self.expression {
-            Expr::Number((n, _)) => println!("{:>width$}-> Number({})", "", n, width = indentation + 4),
-            Expr::Character((ch, _)) => println!("{:>width$}-> Character('{}')", "", ch, width = indentation + 4),
-            Expr::String((str, _)) => println!("{:>width$}-> String(\"{}\")", "", str, width = indentation + 4),
+            Expr::Cast((cast, _), _) => {
+                match cast {
+                    Cast::Primitive((cast_type, _)) => {
+                        println!("{:>width$}-> PrimtiveCast({})", "", cast_type, width = indentation + 4);
+                    }
+                    Cast::NonPrimitive((cast_type, _)) => {
+                        println!("{:>width$}-> NonPrimitiveCast({})", "", cast_type, width = indentation + 4);
+                    }
+                }
+            }
+            Expr::Boolean((bool, _)) => {
+                println!("{:>width$}-> Number({})", "", bool, width = indentation + 4);
+            }
+            Expr::Number((n, _)) => {
+                println!("{:>width$}-> Number({})", "", n, width = indentation + 4);
+            }
+            Expr::Character((ch, _)) => println!(
+                "{:>width$}-> Character('{}')",
+                "",
+                ch,
+                width = indentation + 4
+            ),
+            Expr::String((str, _)) => println!(
+                "{:>width$}-> String(\"{}\")",
+                "",
+                str,
+                width = indentation + 4
+            ),
             Expr::Binary((bin, _)) => bin.display(indentation + 4),
             Expr::VariableCall((id, _)) => println!(
                 "{:>width$}-> Identifier({})",
@@ -548,7 +625,11 @@ impl Node for ExpressionStatement {
                 for (arg, pos) in arguments {
                     let pos = format!("{}:{}", pos.line, pos.index);
                     print!("{}{} |", pos, " ".repeat(10 - pos.len()));
-                    println!("{:>width$}└───[ Argument:", "", width = indentation + (10 - pos.len()) + 8);
+                    println!(
+                        "{:>width$}└───[ Argument:",
+                        "",
+                        width = indentation + (10 - pos.len()) + 8
+                    );
                     arg.display(indentation + 12);
                 }
             }

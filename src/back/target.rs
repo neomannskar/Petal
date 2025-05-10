@@ -40,7 +40,7 @@ impl Target {
                     7 => "x7".to_string(),
                     _ => format!("arg{}", index),
                 }
-            },
+            }
             Target::Rp2040 => {
                 // For Rp2040, adjust as needed (for example, using r0 through r3)
                 match index {
@@ -50,7 +50,7 @@ impl Target {
                     3 => "r3".to_string(),
                     _ => format!("arg{}", index),
                 }
-            },
+            }
         }
     }
 
@@ -114,8 +114,8 @@ impl Target {
         match self {
             // x86 uses "pushq", while aarch64 and others might need a different expansion.
             Target::X86_64 => "pushq",
-            Target::AArch64 => "stp",  // Note: AArch64 does not have push/pop per se.
-            Target::Rp2040 => "PUSH",   // Placeholder
+            Target::AArch64 => "stp", // Note: AArch64 does not have push/pop per se.
+            Target::Rp2040 => "PUSH", // Placeholder
         }
     }
 
@@ -123,8 +123,8 @@ impl Target {
     pub fn pop_instruction(&self) -> &'static str {
         match self {
             Target::X86_64 => "popq",
-            Target::AArch64 => "ldp",  // Again, AArch64 uses paired loads.
-            Target::Rp2040 => "POP",    // Placeholder
+            Target::AArch64 => "ldp", // Again, AArch64 uses paired loads.
+            Target::Rp2040 => "POP",  // Placeholder
         }
     }
 

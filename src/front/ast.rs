@@ -17,11 +17,7 @@ impl Ast {
     }
 
     pub fn display(&self, indentation: usize) {
-        println!(
-            "{:>width$}Abstract Syntax Tree\n",
-            "",
-            width = indentation
-        );
+        println!("{:>width$}Abstract Syntax Tree\n", "", width = indentation);
         for (child, pos) in &self.children {
             let pos_str = format!("{}:{}", pos.line, pos.index);
             print!("{}{} |", pos_str, " ".repeat(10 - pos_str.len()));
@@ -39,17 +35,17 @@ impl Ast {
     pub fn ir(&self, ctx: &mut IRContext) -> IRModule {
         let mut globals = Vec::new();
         let mut functions = Vec::new();
-        
+
         for (child, _) in &self.children {
             let units = child.ir(ctx);
             for unit in units {
                 match unit {
                     IRUnit::Global(instrs) => globals.extend(instrs),
-                    IRUnit::Function(func)  => functions.push(func),
+                    IRUnit::Function(func) => functions.push(func),
                 }
             }
         }
-        
+
         IRModule { globals, functions }
     }
 }
